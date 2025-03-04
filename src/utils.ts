@@ -1,0 +1,73 @@
+export const sendMessageOption = {
+  disable_web_page_preview: true,
+  parse_mode: "HTML",
+};
+
+export function calculateTime(time: number) {
+  const days = Math.floor(time / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((time % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((time % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((time % (1000 * 60)) / 1000);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  if (seconds > 0) return `${seconds}s`;
+  return `0s`;
+}
+
+export const isGroupMsg = (msgType: string) => {
+  if (msgType === "supergroup" || msgType === "group") {
+    return true;
+  }
+  return false;
+};
+
+export const getHelpMessage = () => {
+  const message =`📝 Support commands\n
+/start - Start Monitoring(Group Owner Only)
+/stop - Stop Monitoring(Group Owner Only)
+/startraffle <code>50</code> <code>24</code> - Start a new Raffle(Group Owner Only)
+/addtickets <code>0x03f855...56fe4</code> <code>100</code> - Add Tickets(Group Owner Only)
+/rafflestats - Show Raffle Stats
+/leaderboard - Show Ticket Holders Ranking
+/ticket <code>0x03f855...56fe4</code> - Show Ticket Amount
+/help - Show Support Commands`;
+  return message;
+}
+
+export function shortenAddress(address: string) {
+  if (!address || address.length < 12) return address;
+  return `${address.substring(0, 6)}...${address.substring(
+    address.length - 4,
+    address.length
+  )}`;
+}
+
+export function getTickets(count: number) {
+  if (count < 1) return 0;
+  if (count < 10 ** 6) return count;
+  if (count < 5 * 10 ** 6) return Math.floor(count * 1.03);
+  if (count < 2 * 10 ** 7) return Math.floor(count * 1.06);
+  if (count < 5 * 10 ** 7) return Math.floor(count * 1.08);
+  return Math.floor(count * 1.1);
+}
+
+export const getHolderRankingLogo = (index: number) => {
+	let logo: string;
+	switch (index) {
+		case 0:
+			logo = '🥇';
+			break;
+		case 1:
+			logo = '🥈';
+			break;
+		case 2:
+			logo = '🥉';
+			break;
+		case 3:
+			logo = '🚀';
+			break;
+		default:
+			logo = '🔥';
+	}
+	return logo;
+}
