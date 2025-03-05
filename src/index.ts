@@ -17,6 +17,7 @@ import {
   eventMonitorTimerId,
   getSuiPrice,
   monitoringEvents,
+  getSuitrumpMarketCap,
 } from './web3';
 
 dotenv.config();
@@ -340,6 +341,10 @@ export const sendTransactionMessage = async (
       inputSymbol === "SUI" ? `($${inputPrice.toFixed(4)})` : ""
     }\n`; // Extra newline before "Invest"
     message += `💰 Bought: ${outputAmount} SUITRUMP\n`;
+    const marketCap = await getSuitrumpMarketCap();
+    if (marketCap !== null) {
+      message += `🎰 Market Cap: $${marketCap.toLocaleString()}\n`;
+    }
     message += `🛰 TxDigest: <a href="https://suiscan.xyz/mainnet/tx/${
       data.id.txDigest
     }">${instance.shortenAddress(data.id.txDigest)}</a>\n\n`;

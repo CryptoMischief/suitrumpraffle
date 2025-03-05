@@ -154,6 +154,17 @@ export const getSuiPrice = async () => {
   }
 };
 
+export const getSuitrumpMarketCap = async () => {
+  try {
+    const response = await axios.get('https://api.coingecko.com/api/v3/coins/sui-trump');
+    const marketCap = response.data?.market_data?.market_cap?.usd || null;
+    return marketCap;
+  } catch (err) {
+    console.error("Error fetching SUITRUMP market cap:", err);
+    return null;
+  }
+};
+
 export const monitoringEvents = async (chatId: string) => {
   // console.log("monitoring...");
 
