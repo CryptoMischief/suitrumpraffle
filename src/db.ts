@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 import * as instance from './utils';
+import { fetchSuiNsName } from './web3';
 
 export const init = () => {
   return new Promise(async (resolve: any, reject: any) => {
@@ -33,6 +34,7 @@ const TxEventSchema = mongoose.model(
     sender: String,
     amount: Number,
     ticket: Number,
+    endorser: String,
     timestamp: { type: Date, default: Date.now },
   })
 );
@@ -95,6 +97,7 @@ export async function addTxEvent(params: any = {}) {
         item.sender = params.sender;
         item.amount = params.amount;
         item.ticket = Math.floor(params.amount);
+        item.endorser = params.endorser;
         await item.save();
         resolve(true);
       }
@@ -110,6 +113,15 @@ export async function getTotalTickets(params = {}) {
     TxEventSchema.find(params).then(async (items) => {
       const totalTicket = items.reduce((sum, item) => sum + item.ticket, 0);
       resolve(totalTicket);
+    });
+  });
+}
+
+export async function getEndorseCountByDay(params = {}) {
+  return new Promise((resolve) => {
+    TxEventSchema.find(params).then((items) => {
+      const count = items.length;
+      resolve(count);
     });
   });
 }
@@ -196,22 +208,31 @@ export async function getTopHolders(params = {}) {
         ticketsBySender[sender] = instance.getTickets(Number(tickets));
       });
 
-      console.log("ticketsBySender2 = ", ticketsBySender);
+      // console.log("ticketsBySender2 = ", ticketsBySender);
 
       const sortedSenders = Object.entries(ticketsBySender).sort(
         ([, ticketsA], [, ticketsB]) => Number(ticketsB) - Number(ticketsA)
       );
 
       let senderRanking = [];
+      let name = "";
 
-      sortedSenders.forEach(([sender, tickets]) => {
-        senderRanking.push({ sender: sender, tickets: tickets });
-      });
+      for (const [sender, tickets] of sortedSenders) {
+        name = await fetchSuiNsName(sender);
+        senderRanking.push({ sender: name, tickets: tickets });
+      }
 
       const topSenders = senderRanking
-        .slice(0, 5)
-        .map((item, index) => `${instance.getHolderRankingLogo(index)} <code>${item.sender}</code> ${item.tickets.toLocaleString()}`)
+        .slice(0, 10)
+        .map(
+          (item, index) =>
+            `${instance.getHolderRankingLogo(index)} <code>${
+              item.sender
+            }</code> ${item.tickets.toLocaleString()}`
+        )
         .join("\n");
+
+      // console.log("topSenders = ", topSenders);
 
       resolve(topSenders);
     } catch (err) {

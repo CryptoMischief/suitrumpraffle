@@ -8,6 +8,7 @@ export function calculateTime(time: number) {
   const hours = Math.floor((time % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
   const minutes = Math.floor((time % (1000 * 60 * 60)) / (1000 * 60));
   const seconds = Math.floor((time % (1000 * 60)) / 1000);
+  if (days > 0) return `${days}d ${hours}h`;
   if (hours > 0) return `${hours}h ${minutes}m`;
   if (minutes > 0) return `${minutes}m ${seconds}s`;
   if (seconds > 0) return `${seconds}s`;
@@ -25,8 +26,9 @@ export const getHelpMessage = () => {
   const message =`📝 Support commands\n
 /start - Start Monitoring(Group Owner Only)
 /stop - Stop Monitoring(Group Owner Only)
-/startraffle <code>50</code> <code>24</code> - Start a new Raffle(Group Owner Only)
-/addtickets <code>0x03f855...56fe4</code> <code>100</code> - Add Tickets(Group Owner Only)
+/startraffle - Start Raffle (Admin, e.g., /startraffle 50 24)
+/addtickets - Add Tickets (Admin, e.g., /addtickets 0x123 100)
+/endorse - Endorse user (e.g., /endorse @SuiNs message)
 /rafflestats - Show Raffle Stats
 /leaderboard - Show Ticket Holders Ranking
 /ticket <code>0x03f855...56fe4</code> - Show Ticket Amount
@@ -71,3 +73,10 @@ export const getHolderRankingLogo = (index: number) => {
 	}
 	return logo;
 }
+
+export const ENDORSE_BONUS = 5000;
+
+export const ENDORSE_DISABLED = 0;
+export const IS_ALREADY_ENDORSED = 1;
+export const ENDORSE_EXCEEDS = 2;
+export const ENDORSE_ENABLED = 3;

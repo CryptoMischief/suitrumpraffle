@@ -15,7 +15,10 @@ import { initSession } from './session';
 import * as instance from './utils';
 import {
   eventMonitorTimerId,
+  fetchSuiNsAddress,
+  fetchSuiNsName,
   getSuiPrice,
+  getSuitrumpMarketCap,
   monitoringEvents,
   getSuitrumpMarketCap,
 } from './web3';
@@ -34,6 +37,7 @@ const BOT_COMMAND_RAFFLE_STATS = "/rafflestats";
 const BOT_COMMAND_LEADERBOARD = "/leaderboard";
 const BOT_COMMAND_TICKET = "/ticket";
 const BOT_COMMAND_ADD_TICKETS = "/addtickets";
+const BOT_COMMAND_ENDORSE = "/endorse";
 
 const bot = new TelegramBot(token, {
   polling: {
@@ -53,15 +57,28 @@ bot.getMe().then((me) => {
 const botCommands = [
   { command: "/start", description: "Start Monitoring (Group Owner Only)" },
   { command: "/stop", description: "Stop Monitoring (Group Owner Only)" },
-  { command: "/startraffle", description: "Start Raffle (Admin, e.g., /startraffle 50 24)" },
-  { command: "/addtickets", description: "Add Tickets (Admin, e.g., /addtickets 0x123 100)" },
+  {
+    command: "/startraffle",
+    description: "Start Raffle (Admin, e.g., /startraffle 50 24)",
+  },
+  {
+    command: "/addtickets",
+    description: "Add Tickets (Admin, e.g., /addtickets 0x123 100)",
+  },
+  {
+    command: "/endorse",
+    description: "Endorse user (e.g., /endorse @SuiNs message)",
+  },
   { command: "/rafflestats", description: "Show Raffle Stats" },
   { command: "/leaderboard", description: "Show Top Holders" },
   { command: "/ticket", description: "Check Tickets (e.g., /ticket 0x123)" },
   { command: "/help", description: "Show Commands" },
 ];
 
-bot.setMyCommands(botCommands).then(() => console.log("Commands set!")).catch(console.error);
+bot
+  .setMyCommands(botCommands)
+  .then(() => console.log("Commands set!"))
+  .catch(console.error);
 
 bot.on("message", async (message) => {
   try {
@@ -114,7 +131,10 @@ bot.on("message", async (message) => {
       );
     } else if (command == BOT_COMMAND_TICKET) {
       const params = message.text.split(" ");
-      const walletAddress = params[1];
+      let walletAddress = params[1];
+      if (walletAddress.startsWith("@")) {
+        walletAddress = await fetchSuiNsAddress(walletAddress.substring(1));
+      }
       const amount = await database.getTotalTickets({
         sender: walletAddress,
       });
@@ -129,7 +149,6 @@ bot.on("message", async (message) => {
         const params = message.text.split(" ");
         const prize = params[1];
         const duration = params[2];
-        console.log("prize: ", prize);
         const isAdded = await database.addRaffle({
           prize: Number(prize),
           duration: Number(duration),
@@ -144,8 +163,10 @@ bot.on("message", async (message) => {
 🎟 Buy SUITRUMP to earn tickets!`,
             instance.sendMessageOption as TelegramBot.SendMessageOptions
           );
-          scheduleMessage(session.chatId, new Date(Date.now() + Number(duration) * 3600000 + 1000));
-          
+          scheduleMessage(
+            session.chatId,
+            new Date(Date.now() + Number(duration) * 3600000 + 1000)
+          );
         } else if (prize === undefined || duration === undefined) {
           await bot.sendMessage(
             session.chatId,
@@ -186,10 +207,11 @@ bot.on("message", async (message) => {
           );
         } else if (raffle) {
           const adderss = await database.getRaffleWinner();
+          const suins = await fetchSuiNsName(adderss as string);
           await bot.sendMessage(
             session.chatId,
             `🔴 Raffle has ended!
-🏆 Winner: <code>${adderss}</code>`,
+🏆 Winner: <code>${suins}</code>`,
             instance.sendMessageOption as TelegramBot.SendMessageOptions
           );
         } else {
@@ -218,11 +240,12 @@ ${topHolders}`,
             instance.sendMessageOption as TelegramBot.SendMessageOptions
           );
         } else if (raffle) {
-          const adderss = await database.getRaffleWinner();
+          const address = await database.getRaffleWinner();
+          const suins = await fetchSuiNsName(address as string);
           await bot.sendMessage(
             session.chatId,
             `🔴 Raffle has ended!
-🏆 Winner: <code>${adderss}</code>`,
+🏆 Winner: ${suins}`,
             instance.sendMessageOption as TelegramBot.SendMessageOptions
           );
         } else {
@@ -236,7 +259,7 @@ ${topHolders}`,
     } else if (command == BOT_COMMAND_ADD_TICKETS) {
       if (await isAdminMsg(message)) {
         const params = message.text.split(" ");
-        const walletAddress = params[1];
+        let walletAddress = params[1];
         const amount = params[2];
         if (walletAddress === undefined || amount === undefined) {
           await bot.sendMessage(
@@ -252,23 +275,19 @@ ${topHolders}`,
           Date.now() - new Date(raffle.timestamp).getTime() <
             raffle.duration * 3600000
         ) {
+          if (walletAddress.startsWith("@")) {
+            walletAddress = await fetchSuiNsAddress(walletAddress.substring(1));
+          }
           await database.addTxEvent({
             sender: walletAddress,
             amount: Number(amount),
+            endorser: null,
           }),
             await bot.sendMessage(
               session.chatId,
               `🟢 Tickets are added!`,
               instance.sendMessageOption as TelegramBot.SendMessageOptions
             );
-        } else if (raffle) {
-          const adderss = await database.getRaffleWinner();
-          await bot.sendMessage(
-            session.chatId,
-            `🔴 Raffle has ended!
-🏆 Winner: <code>${adderss}</code>`,
-            instance.sendMessageOption as TelegramBot.SendMessageOptions
-          );
         } else {
           await bot.sendMessage(
             session.chatId,
@@ -277,9 +296,81 @@ ${topHolders}`,
           );
         }
       }
+    } else if (command == BOT_COMMAND_ENDORSE) {
+      const params = message.text.split(" ");
+      let suins = params[1];
+      const content = message.text.substring((params[0] + params[1]).length + 1);
+      if (suins === undefined || content === undefined) {
+        await bot.sendMessage(
+          session.chatId,
+          `🔴 Invalid command!`,
+          instance.sendMessageOption as TelegramBot.SendMessageOptions
+        );
+        return;
+      }
+      if (!suins.startsWith("@")) {
+        await bot.sendMessage(
+          session.chatId,
+          `🔴 Invalid command!`,
+          instance.sendMessageOption as TelegramBot.SendMessageOptions
+        );
+        return;
+      }
+      const raffle: any = await database.selectRaffle();
+      if (
+        raffle &&
+        Date.now() - new Date(raffle.timestamp).getTime() <
+          raffle.duration * 3600000
+      ) {
+        const address = await fetchSuiNsAddress(suins.substring(1));
+        const flag = await isEndorseEnabled(message, address);
+        if (flag === instance.ENDORSE_DISABLED) {
+          await bot.sendMessage(
+            session.chatId,
+            `🔴 Endorse Error`,
+            instance.sendMessageOption as TelegramBot.SendMessageOptions
+          );
+        } else if (flag === instance.IS_ALREADY_ENDORSED) {
+          await bot.sendMessage(
+            session.chatId,
+            `🔴 You can endorse this name once a day.`,
+            instance.sendMessageOption as TelegramBot.SendMessageOptions
+          );
+        } else if (flag === instance.ENDORSE_EXCEEDS) {
+          await bot.sendMessage(
+            session.chatId,
+            `🔴 You can't endorse more than 3 times a day.`,
+            instance.sendMessageOption as TelegramBot.SendMessageOptions
+          );
+        } else {
+          if (address === "") {
+            await bot.sendMessage(
+              session.chatId,
+              `🔴 No user with <code>${suins}</code> SuiNs name`,
+              instance.sendMessageOption as TelegramBot.SendMessageOptions
+            );
+          } else {
+            await database.addTxEvent({
+              sender: address,
+              amount: Number(instance.ENDORSE_BONUS),
+              endorser: message.from.id,
+            });
+            await bot.sendMessage(
+              session.chatId,
+               `🏆 <code>${suins}</code> was Endorsed and got 5000 raffle tickets!\n\n📄 Message - ${content}`,
+                 instance.sendMessageOption as TelegramBot.SendMessageOptions
+            );
+          }
+        }
+      } else {
+        await bot.sendMessage(
+          session.chatId,
+          `🔴 No raffle is currently running!`,
+          instance.sendMessageOption as TelegramBot.SendMessageOptions
+        );
+      }
     }
   } catch (error) {
-    console.log("message: ", error);
     try {
       await bot.sendMessage(
         message.chat.id,
@@ -287,13 +378,14 @@ ${topHolders}`,
         instance.sendMessageOption as TelegramBot.SendMessageOptions
       );
     } catch (error) {
-      console.log("message2: ", error);
+      console.log("message: ", error);
     }
   }
 });
 
 export const sendTransactionMessage = async (
   chatId: string,
+  sender: string,
   data: any,
   decimal_a: number = DEFAULT_TOKEN_DECIMALS,
   decimal_b: number = DEFAULT_TOKEN_DECIMALS,
@@ -337,7 +429,9 @@ export const sendTransactionMessage = async (
     const emojis = "🏆".repeat(emojiCount); // Standard Unicode smiley face
 
     message += `${emojis}`; // Emoji on its own line after "SUI TRUMP BUY"
-    message += `\n\n💸 Invest: ${inputAmount} ${inputSymbol} ${
+    const suiNsName = await fetchSuiNsName(sender);
+    message += `\n\n👤 Buyer: <code>${suiNsName}</code>`;
+    message += `\n💸 Invest: ${inputAmount} ${inputSymbol} ${
       inputSymbol === "SUI" ? `($${inputPrice.toFixed(4)})` : ""
     }\n`; // Extra newline before "Invest"
     message += `💰 Bought: ${outputAmount} SUITRUMP\n`;
@@ -362,6 +456,7 @@ export const sendTransactionMessage = async (
       await database.addTxEvent({
         sender: data.sender,
         amount: outputAmount,
+        endorser: null,
       }),
     ]);
   } catch (error) {
@@ -401,6 +496,26 @@ const isAdminMsg = async (msg: any) => {
   return false;
 };
 
+const isEndorseEnabled = async (msg: any, address: string) => {
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const dayAmount = await database.getEndorseCountByDay({
+    endorser: msg.from.id,
+    timestamp: { $gte: twentyFourHoursAgo },
+  });
+  console.log("endorse count = ", dayAmount);
+  if (typeof dayAmount !== "number") return instance.ENDORSE_DISABLED;
+  if (dayAmount > 2) return instance.ENDORSE_EXCEEDS;
+
+  const endorseCount = await database.getEndorseCountByDay({
+    sender: address,
+    endorser: msg.from.id,
+    timestamp: { $gte: twentyFourHoursAgo },
+  });
+  if (typeof endorseCount !== "number") return instance.ENDORSE_DISABLED;
+  if (endorseCount > 0) return instance.IS_ALREADY_ENDORSED;
+  return instance.ENDORSE_ENABLED;
+};
+
 async function getGroupOwner(chatId: string) {
   try {
     const admins = await bot.getChatAdministrators(chatId);
@@ -424,10 +539,13 @@ const scheduleMessage = async (chatId: string, date: Date) => {
   setTimeout(async () => {
     try {
       const adderss = await database.getRaffleWinner();
-      const raffle = await database.selectRaffle() as { prize?: number } | null; // Allow missing prize
+      const raffle = (await database.selectRaffle()) as {
+        prize?: number;
+      } | null; // Allow missing prize
+      const suins = await fetchSuiNsName(adderss as string);
 
-const messageContent = `🔴 Raffle has ended!
-🏆 Winner: <code>${adderss}</code>
+      const messageContent = `🔴 Raffle has ended!
+🏆 Winner: <code>${suins}</code>
 💰 Prize: ${raffle?.prize ?? "Unknown"} SUI`; // Fallback if prize is missing
 
       await bot.sendMessage(

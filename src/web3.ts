@@ -19,7 +19,7 @@ export let eventMonitorTimerId = null;
 
 export const fetchTokenTradeTransactionsCetus = async (chatId: string) => {
   let tokenTradeEvents = [];
-  
+
   try {
     const response = await client.queryEvents({
       query: {
@@ -34,7 +34,8 @@ export const fetchTokenTradeTransactionsCetus = async (chatId: string) => {
     response.data.filter((event) => {
       const parsedEvent = event.parsedJson as any;
       if (
-        (parsedEvent?.coin_a?.name === config.TOKEN_ADDRESS && !parsedEvent?.a2b) ||
+        (parsedEvent?.coin_a?.name === config.TOKEN_ADDRESS &&
+          !parsedEvent?.a2b) ||
         (parsedEvent?.coin_b?.name === config.TOKEN_ADDRESS && parsedEvent?.a2b)
       ) {
         const eventId = event.id;
@@ -50,9 +51,21 @@ export const fetchTokenTradeTransactionsCetus = async (chatId: string) => {
     });
 
     for (let i = 0; i < tokenTradeEvents.length; i++) {
-      const decimal_a = await getTokenMetadata("0x" + tokenTradeEvents[i].parsedJson.coin_a.name);
-      const decimal_b = await getTokenMetadata("0x" + tokenTradeEvents[i].parsedJson.coin_b.name);
-      await index.sendTransactionMessage(chatId, tokenTradeEvents[i], decimal_a, decimal_b, "cetus");
+      const decimal_a = await getTokenMetadata(
+        "0x" + tokenTradeEvents[i].parsedJson.coin_a.name
+      );
+      const decimal_b = await getTokenMetadata(
+        "0x" + tokenTradeEvents[i].parsedJson.coin_b.name
+      );
+      const sender = tokenTradeEvents[i].sender;
+      await index.sendTransactionMessage(
+        chatId,
+        sender,
+        tokenTradeEvents[i],
+        decimal_a,
+        decimal_b,
+        "cetus"
+      );
     }
   } catch (error) {
     console.error("Error fetching token trade transactions:", error);
@@ -81,16 +94,28 @@ export const fetchTokenTradeTransactionsSettle = async (chatId: string) => {
         if (eventMapSettle.get(JSON.stringify(event.id))) {
           return;
         }
-        // console.log(parsedEvent);
         eventMapSettle.set(JSON.stringify(event.id), event.id);
         tokenTradeEvents.push(event);
       }
     });
 
     for (let i = 0; i < tokenTradeEvents.length; i++) {
-      const decimal_a = await getTokenMetadata("0x" + tokenTradeEvents[i].parsedJson.coin_in.name);
-      const decimal_b = await getTokenMetadata("0x" + tokenTradeEvents[i].parsedJson.coin_out.name);
-      await index.sendTransactionMessage(chatId, tokenTradeEvents[i], decimal_a, decimal_b, "settle");
+      const decimal_a = await getTokenMetadata(
+        "0x" + tokenTradeEvents[i].parsedJson.coin_in.name
+      );
+      const decimal_b = await getTokenMetadata(
+        "0x" + tokenTradeEvents[i].parsedJson.coin_out.name
+      );
+      const sender = tokenTradeEvents[i].parsedJson.sender;
+
+      await index.sendTransactionMessage(
+        chatId,
+        sender,
+        tokenTradeEvents[i],
+        decimal_a,
+        decimal_b,
+        "settle"
+      );
     }
   } catch (error) {
     console.error("Error fetching token trade transactions:", error);
@@ -99,7 +124,7 @@ export const fetchTokenTradeTransactionsSettle = async (chatId: string) => {
 
 export const fetchTokenTradeTransactionsBlueMove = async (chatId: string) => {
   let tokenTradeEvents = [];
-  
+
   try {
     const response = await client.queryEvents({
       query: {
@@ -114,7 +139,8 @@ export const fetchTokenTradeTransactionsBlueMove = async (chatId: string) => {
     response.data.filter((event) => {
       const parsedEvent = event.parsedJson as any;
       if (
-        (parsedEvent?.coin_a?.name === config.TOKEN_ADDRESS && !parsedEvent?.a2b) ||
+        (parsedEvent?.coin_a?.name === config.TOKEN_ADDRESS &&
+          !parsedEvent?.a2b) ||
         (parsedEvent?.coin_b?.name === config.TOKEN_ADDRESS && parsedEvent?.a2b)
       ) {
         const eventId = event.id;
@@ -130,16 +156,58 @@ export const fetchTokenTradeTransactionsBlueMove = async (chatId: string) => {
     });
 
     for (let i = 0; i < tokenTradeEvents.length; i++) {
-      const decimal_a = await getTokenMetadata("0x" + tokenTradeEvents[i].parsedJson.coin_a.name);
-      const decimal_b = await getTokenMetadata("0x" + tokenTradeEvents[i].parsedJson.coin_b.name);
-      await index.sendTransactionMessage(chatId, tokenTradeEvents[i], decimal_a, decimal_b, "bluemove");
+      const decimal_a = await getTokenMetadata(
+        "0x" + tokenTradeEvents[i].parsedJson.coin_a.name
+      );
+      const decimal_b = await getTokenMetadata(
+        "0x" + tokenTradeEvents[i].parsedJson.coin_b.name
+      );
+      const sender = tokenTradeEvents[i].sender;
+      await index.sendTransactionMessage(
+        chatId,
+        sender,
+        tokenTradeEvents[i],
+        decimal_a,
+        decimal_b,
+        "bluemove"
+      );
     }
   } catch (error) {
     console.error("Error fetching token trade transactions:", error);
   }
 };
 
+export const fetchSuiNsName = async (addr: string) => {
+  try {
+    const response = await client.resolveNameServiceNames({
+      address: addr
+    });
 
+    if (response && response.data && response.data.length === 0) return addr;
+    console.log("suins name = ", response.data[0]);
+    const name = "@" + response.data[0].split(".")[0];
+    return name;
+    
+  } catch (error) {
+    console.error("Error fetching SuiNs name");
+  }
+};
+
+export const fetchSuiNsAddress = async (label: string) => {
+  label = label + ".sui";
+  try {
+    const response = await client.resolveNameServiceAddress({
+      name: label
+    });
+
+    if (!response) return "";
+    console.log("suins address = ", response);
+    return response;
+    
+  } catch (error) {
+    console.error("Error fetching token trade transactions:", error);
+  }
+};
 
 export const getSuiPrice = async () => {
   try {
@@ -187,9 +255,9 @@ export const monitoringEvents = async (chatId: string) => {
 
 export const getTokenMetadata = async (tokenAddress: string) => {
   try {
-    const response = await client.getCoinMetadata({coinType: tokenAddress});
+    const response = await client.getCoinMetadata({ coinType: tokenAddress });
     if (response) {
-      return response.decimals
+      return response.decimals;
     }
     return config.DEFAULT_TOKEN_DECIMALS;
   } catch (error) {
