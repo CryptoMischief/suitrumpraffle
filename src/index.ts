@@ -20,8 +20,8 @@ import {
   getSuiPrice,
   getSuitrumpMarketCap,
   monitoringEvents,
-  getSuitrumpMarketCap,
 } from './web3';
+
 
 dotenv.config();
 
