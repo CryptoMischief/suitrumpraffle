@@ -14,8 +14,59 @@ const client = new SuiClient({ url: RPC_URL });
 let eventMapCetus = new Map<string, any>();
 let eventMapSettle = new Map<string, any>();
 let eventMapBlueMove = new Map<string, any>();
+let eventMapFlowX = new Map<string, any>();
 
 export let eventMonitorTimerId = null;
+
+export const fetchTokenTradeTransactionsFlowX = async (chatId: string) => {
+  let tokenTradeEvents = [];
+  try {
+    const response = await client.queryEvents({
+      query: {
+        MoveEventType: config.MOVE_EVENT_TYPE_FLOWX,
+      },
+      limit: 100,
+      order: "descending",
+    });
+
+    if (response && response.data && response.data.length === 0) return;
+
+    response.data.filter((event) => {
+      const parsedEvent = event.parsedJson as any;
+      if (parsedEvent?.coin_out?.name === config.TOKEN_ADDRESS) {
+        const eventId = event.id;
+        if (!eventId) return;
+
+        if (eventMapFlowX.get(JSON.stringify(event.id))) {
+          return;
+        }
+
+        eventMapFlowX.set(JSON.stringify(event.id), event.id);
+        tokenTradeEvents.push(event);
+      }
+    });
+
+    for (let i = 0; i < tokenTradeEvents.length; i++) {
+      const decimal_a = await getTokenMetadata(
+        "0x" + tokenTradeEvents[i].parsedJson.coin_in.name
+      );
+      const decimal_b = await getTokenMetadata(
+        "0x" + tokenTradeEvents[i].parsedJson.coin_out.name
+      );
+      const sender = tokenTradeEvents[i].parsedJson.swapper; // Use swapper instead of sender
+      await index.sendTransactionMessage(
+        chatId,
+        sender,
+        tokenTradeEvents[i],
+        decimal_a,
+        decimal_b,
+        "flowx"
+      );
+    }
+  } catch (error) {
+    console.error("Error fetching FlowX token trade transactions:", error);
+  }
+};
 
 export const fetchTokenTradeTransactionsCetus = async (chatId: string) => {
   let tokenTradeEvents = [];
@@ -241,6 +292,7 @@ export const monitoringEvents = async (chatId: string) => {
       fetchTokenTradeTransactionsCetus(chatId),
       fetchTokenTradeTransactionsSettle(chatId),
       fetchTokenTradeTransactionsBlueMove(chatId),
+      fetchTokenTradeTransactionsFlowX(chatId), // Add FlowX
     ]);
   } catch (err) {
     console.log("monitoringEvents err: ", err);

@@ -416,6 +416,10 @@ export const sendTransactionMessage = async (
       inputAmount = data.parsedJson.amount_in / 10 ** decimal_a;
       inputSymbol = data.parsedJson.coin_in.name.split("::").pop();
       outputAmount = data.parsedJson.amount_out / 10 ** decimal_b;
+    } else if (flag === "flowx") {
+      inputAmount = data.parsedJson.amount_in / 10 ** decimal_a;
+      inputSymbol = data.parsedJson.coin_in.name.split("::").pop();
+      outputAmount = data.parsedJson.amount_out / 10 ** decimal_b;
     } else {
       return;
     }
@@ -425,7 +429,7 @@ export const sendTransactionMessage = async (
     }
 
     // Calculate emoji count (1 per 50,000 SUITRUMP, min 1)
-    const emojiCount = Math.floor(outputAmount / 100000) || 1;
+    const emojiCount = Math.floor(outputAmount / 500000) || 1;
     const emojis = "🏆".repeat(emojiCount); // Standard Unicode smiley face
 
     message += `${emojis}`; // Emoji on its own line after "SUI TRUMP BUY"
@@ -454,7 +458,7 @@ export const sendTransactionMessage = async (
         parse_mode: "HTML",
       }),
       await database.addTxEvent({
-        sender: data.sender,
+        sender: data.parsedJson.swapper || data.sender, // Fallback to sender if swapper is unavailable
         amount: outputAmount,
         endorser: null,
       }),
