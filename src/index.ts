@@ -412,14 +412,18 @@ export const sendTransactionMessage = async (
       outputAmount = data.parsedJson.a2b
         ? data.parsedJson.amount_out / 10 ** decimal_b
         : data.parsedJson.amount_out / 10 ** decimal_a;
-    } else if (flag === "settle") {
+    } else if (flag === "settle" || flag === "flowx") {
       inputAmount = data.parsedJson.amount_in / 10 ** decimal_a;
       inputSymbol = data.parsedJson.coin_in.name.split("::").pop();
       outputAmount = data.parsedJson.amount_out / 10 ** decimal_b;
-    } else if (flag === "flowx") {
-      inputAmount = data.parsedJson.amount_in / 10 ** decimal_a;
-      inputSymbol = data.parsedJson.coin_in.name.split("::").pop();
-      outputAmount = data.parsedJson.amount_out / 10 ** decimal_b;
+    } else if (flag === "suirewardsme") { // Added: Handle SuiRewardsMe swap events
+      inputAmount = data.parsedJson.amountin / 10 ** decimal_a; // Added: Use amountin for input amount
+      inputSymbol = data.parsedJson.tokenin.name.split("::").pop(); // Added: Use tokenin.name for input token symbol
+      outputAmount = data.parsedJson.amountout / 10 ** decimal_b; // Added: Use amountout for output amount
+    } else if (flag === "aftermath") { // Added: Handle Aftermath swap events
+      inputAmount = data.parsedJson.amount_in / 10 ** decimal_a; // Added: Use amount_in for input amount
+      inputSymbol = data.parsedJson.type_in.split("::").pop(); // Added: Use type_in for input token symbol
+      outputAmount = data.parsedJson.amount_out / 10 ** decimal_b; // Added: Use amount_out for output amount
     } else {
       return;
     }
@@ -442,6 +446,17 @@ export const sendTransactionMessage = async (
     const marketCap = await getSuitrumpMarketCap();
     if (marketCap !== null) {
       message += `🎰 Market Cap: $${marketCap.toLocaleString()}\n`;
+
+      // Added: Map flag to DEX name and emoji
+    const dexInfo = {
+      aftermath: { name: "Aftermath", emoji: "🦈" },
+      cetus: { name: "Cetus", emoji: "🐳" },
+      settle: { name: "BlueFin", emoji: "🐟" },
+      bluemove: { name: "BlueMove", emoji: "🌊" },
+      flowx: { name: "FlowX", emoji: "💧" },
+      suirewardsme: { name: "SuiRewardsMe", emoji: "🍃" },
+    };
+    message += `🌐 DEX: ${dexInfo[flag].name} ${dexInfo[flag].emoji}\n\n`; // Added: Display DEX name with emoji after TxDigest
     }
     message += `🛰 TxDigest: <a href="https://suiscan.xyz/mainnet/tx/${
       data.id.txDigest
@@ -458,7 +473,7 @@ export const sendTransactionMessage = async (
         parse_mode: "HTML",
       }),
       await database.addTxEvent({
-        sender: data.parsedJson.swapper || data.sender, // Fallback to sender if swapper is unavailable
+        sender: flag === "aftermath" ? data.parsedJson.swapper : data.parsedJson.wallet || data.sender, // Modified: Use swapper for Aftermath, wallet for SuiRewardsMe, else sender
         amount: outputAmount,
         endorser: null,
       }),

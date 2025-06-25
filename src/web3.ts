@@ -15,6 +15,8 @@ let eventMapCetus = new Map<string, any>();
 let eventMapSettle = new Map<string, any>();
 let eventMapBlueMove = new Map<string, any>();
 let eventMapFlowX = new Map<string, any>();
+let eventMapSuiRewardsMe = new Map<string, any>(); // Added: Map to track SuiRewardsMe events to avoid duplicates
+let eventMapAftermath = new Map<string, any>(); // Added: Map to track Aftermath events to avoid duplicates
 
 export let eventMonitorTimerId = null;
 
@@ -228,6 +230,108 @@ export const fetchTokenTradeTransactionsBlueMove = async (chatId: string) => {
   }
 };
 
+// Added: Function to fetch and process SuiRewardsMe swap events
+export const fetchTokenTradeTransactionsSuiRewardsMe = async (chatId: string) => {
+  let tokenTradeEvents = [];
+  try {
+    const response = await client.queryEvents({
+      query: {
+        MoveEventType: config.MOVE_EVENT_TYPE_SUIREWARDSME, // Added: Query SuiRewardsMe events
+      },
+      limit: 100,
+      order: "descending", // Added: Fetch latest transactions first
+    });
+
+    if (response && response.data && response.data.length === 0) return;
+
+    response.data.filter((event) => {
+      const parsedEvent = event.parsedJson as any;
+      if (parsedEvent?.tokenout?.name === config.TOKEN_ADDRESS) { // Added: Check tokenout.name for SUITRUMP buys
+        const eventId = event.id;
+        if (!eventId) return;
+
+        if (eventMapSuiRewardsMe.get(JSON.stringify(event.id))) {
+          return; // Added: Skip duplicate events
+        }
+        eventMapSuiRewardsMe.set(JSON.stringify(event.id), event.id); // Added: Store event ID to track duplicates
+        tokenTradeEvents.push(event);
+      }
+    });
+
+    for (let i = 0; i < tokenTradeEvents.length; i++) {
+      const decimal_a = await getTokenMetadata(
+        "0x" + tokenTradeEvents[i].parsedJson.tokenin.name // Added: Use tokenin.name for input token metadata
+      );
+      const decimal_b = await getTokenMetadata(
+        "0x" + tokenTradeEvents[i].parsedJson.tokenout.name // Added: Use tokenout.name for output token metadata
+      );
+      const sender = tokenTradeEvents[i].parsedJson.wallet || tokenTradeEvents[i].sender; // Added: Use wallet as sender, fallback to event.sender
+
+      await index.sendTransactionMessage(
+        chatId,
+        sender,
+        tokenTradeEvents[i],
+        decimal_a,
+        decimal_b,
+        "suirewardsme" // Added: Pass suirewardsme flag to sendTransactionMessage
+      );
+    }
+  } catch (error) {
+    console.error("Error fetching SuiRewardsMe token trade transactions:", error);
+  }
+};
+
+// Added: Function to fetch and process Aftermath swap events
+export const fetchTokenTradeTransactionsAftermath = async (chatId: string) => {
+  let tokenTradeEvents = [];
+  try {
+    const response = await client.queryEvents({
+      query: {
+        MoveEventType: config.MOVE_EVENT_TYPE_AFTERMATH,
+      },
+      limit: 100,
+      order: "descending",
+    });
+
+    if (response && response.data && response.data.length === 0) return;
+
+    response.data.filter((event) => {
+      const parsedEvent = event.parsedJson as any;
+      // Modified: Normalize type_out and TOKEN_ADDRESS for comparison
+      if (parsedEvent?.type_out?.toLowerCase().trim() === config.TOKEN_ADDRESS.toLowerCase().trim()) {
+        const eventId = event.id;
+        if (!eventId) return;
+
+        if (eventMapAftermath.get(JSON.stringify(event.id))) {
+          return;
+        }
+        eventMapAftermath.set(JSON.stringify(event.id), event.id);
+        tokenTradeEvents.push(event);
+      }
+    });
+
+    for (let i = 0; i < tokenTradeEvents.length; i++) {
+      const decimal_a = await getTokenMetadata(
+        "0x" + tokenTradeEvents[i].parsedJson.type_in // Modified: Ensure type_in is prefixed correctly
+      );
+      const decimal_b = await getTokenMetadata(
+        "0x" + tokenTradeEvents[i].parsedJson.type_out // Modified: Ensure type_out is prefixed correctly
+      );
+      const sender = tokenTradeEvents[i].parsedJson.swapper; // Modified: Ensure swapper is used as sender
+      await index.sendTransactionMessage(
+        chatId,
+        sender,
+        tokenTradeEvents[i],
+        decimal_a,
+        decimal_b,
+        "aftermath"
+      );
+    }
+  } catch (error) {
+    console.error("Error fetching Aftermath token trade transactions:", error);
+  }
+};
+
 export const fetchSuiNsName = async (addr: string) => {
   try {
     const response = await client.resolveNameServiceNames({
@@ -293,6 +397,8 @@ export const monitoringEvents = async (chatId: string) => {
       fetchTokenTradeTransactionsSettle(chatId),
       fetchTokenTradeTransactionsBlueMove(chatId),
       fetchTokenTradeTransactionsFlowX(chatId), // Add FlowX
+      fetchTokenTradeTransactionsSuiRewardsMe(chatId), // Added: Include SuiRewardsMe event monitoring
+      fetchTokenTradeTransactionsAftermath(chatId), // Added: Include Aftermath event monitoring
     ]);
   } catch (err) {
     console.log("monitoringEvents err: ", err);
