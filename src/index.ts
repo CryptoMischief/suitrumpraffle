@@ -433,7 +433,7 @@ export const sendTransactionMessage = async (
     }
 
     // Calculate emoji count (1 per 50,000 SUITRUMP, min 1)
-    const emojiCount = Math.floor(outputAmount / 500000) || 1;
+    const emojiCount = Math.floor(outputAmount / 100000) || 1;
     const emojis = "🏆".repeat(emojiCount); // Standard Unicode smiley face
 
     message += `${emojis}`; // Emoji on its own line after "SUI TRUMP BUY"
