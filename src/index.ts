@@ -392,6 +392,7 @@ export const sendTransactionMessage = async (
   flag: string
 ) => {
   if (data === null) return;
+
   let message = "";
   const suiPrice = await getSuiPrice();
   let inputPrice = 0;
@@ -400,7 +401,7 @@ export const sendTransactionMessage = async (
   let outputAmount = 0;
 
   try {
-    message = `\u{1F4CC} ${TOKEN_NAME} BUY \n\n`;
+    message = `📌 ${TOKEN_NAME} BUY \n\n`;
 
     if (flag === "cetus" || flag === "bluemove") {
       inputAmount = data.parsedJson.a2b
@@ -416,17 +417,17 @@ export const sendTransactionMessage = async (
       inputAmount = data.parsedJson.amount_in / 10 ** decimal_a;
       inputSymbol = data.parsedJson.coin_in.name.split("::").pop();
       outputAmount = data.parsedJson.amount_out / 10 ** decimal_b;
-    } else if (flag === "suirewardsme") { // Added: Handle SuiRewardsMe swap events
-      inputAmount = data.parsedJson.amountin / 10 ** decimal_a; // Added: Use amountin for input amount
-      inputSymbol = data.parsedJson.tokenin.name.split("::").pop(); // Added: Use tokenin.name for input token symbol
-      outputAmount = data.parsedJson.amountout / 10 ** decimal_b; // Added: Use amountout for output amount
-    } else if (flag === "aftermath") { // Added: Handle Aftermath swap events
-      inputAmount = data.parsedJson.amount_in / 10 ** decimal_a; // Added: Use amount_in for input amount
-      inputSymbol = data.parsedJson.type_in.split("::").pop(); // Added: Use type_in for input token symbol
-      outputAmount = data.parsedJson.amount_out / 10 ** decimal_b; // Added: Use amount_out for output amount
+    } else if (flag === "suirewardsme") {
+      inputAmount = data.parsedJson.amountin / 10 ** decimal_a;
+      inputSymbol = data.parsedJson.tokenin.name.split("::").pop();
+      outputAmount = data.parsedJson.amountout / 10 ** decimal_b;
+    } else if (flag === "aftermath") {
+      inputAmount = data.parsedJson.amount_in / 10 ** decimal_a;
+      inputSymbol = data.parsedJson.type_in.split("::").pop();
+      outputAmount = data.parsedJson.amount_out / 10 ** decimal_b;
     } else if (flag === "router") {
       inputAmount = data.parsedJson.amount_in / 10 ** decimal_a;
-      inputSymbol = data.parsedJson.from.name.split("::").pop();
+      inputSymbol = data.parsedJson.from?.name?.split("::").pop() || "SUI";
       outputAmount = data.parsedJson.amount_out / 10 ** decimal_b;
     } else {
       return;
@@ -436,22 +437,23 @@ export const sendTransactionMessage = async (
       inputPrice = inputAmount * suiPrice;
     }
 
-    // Calculate emoji count (1 per 50,000 SUITRUMP, min 1)
     const emojiCount = Math.floor(outputAmount / 100000) || 1;
-    const emojis = "🏆".repeat(emojiCount); // Standard Unicode smiley face
+    const emojis = "🏆".repeat(emojiCount);
 
-    message += `${emojis}`; // Emoji on its own line after "SUI TRUMP BUY"
+    message += `${emojis}\n\n`;
+
     const suiNsName = await fetchSuiNsName(sender);
-    message += `\n\n👤 Buyer: <code>${suiNsName}</code>`;
-    message += `\n💸 Invest: ${inputAmount} ${inputSymbol} ${
+    message += `👤 Buyer: <code>${suiNsName}</code>\n`;
+    message += `💸 Invest: ${inputAmount} ${inputSymbol} ${
       inputSymbol === "SUI" ? `($${inputPrice.toFixed(4)})` : ""
-    }\n`; // Extra newline before "Invest"
+    }\n`;
     message += `💰 Bought: ${outputAmount} SUITRUMP\n`;
+
     const marketCap = await getSuitrumpMarketCap();
     if (marketCap !== null) {
       message += `🎰 Market Cap: $${marketCap.toLocaleString()}\n`;
 
-      // Added: Map flag to DEX name and emoji (safe block)
+      // ✅ Safe DEX block
       try {
         const dexInfo: Record<string, { name: string; emoji: string }> = {
           aftermath: { name: "Aftermath", emoji: "🦈" },
@@ -473,26 +475,27 @@ export const sendTransactionMessage = async (
         message += "🌐 DEX: Router 🔄\n\n";
       }
     }
-        message += `🛰 TxDigest: <a href="https://suiscan.xyz/mainnet/tx/${data.id.txDigest}">${instance.shortenAddress(data.id.txDigest)}</a>\n\n`;
 
-    message += `📈 Chart:  <a href="${CHART}">DexScreener</a>\n`;
-    message += `🔗 Links:  <a href="${WEBSITE}">Website</a>`;
-    message += ` | <a href="${TELEGRAM}">Telegram</a>`;
-    message += ` | <a href="${TWITTER}">Twitter</a>`;
+    message += `🛰 TxDigest: <a href="https://suiscan.xyz/mainnet/tx/${data.id.txDigest}">
+${instance.shortenAddress(data.id.txDigest)}</a>\n\n`;
+    message += `📈 Chart: <a href="${CHART}">DexScreener</a>\n`;
+    message += `🔗 Links: <a href="${WEBSITE}">Website</a> | <a href="${TELEGRAM}">Telegram</a> | <a href="${TWITTER}">Twitter</a>`;
 
     await Promise.all([
       bot.sendVideo(chatId, VIDEO_PATH, {
         caption: message,
         parse_mode: "HTML",
       }),
-      await database.addTxEvent({
-        sender: flag === "aftermath" ? data.parsedJson.swapper : data.parsedJson.wallet || data.sender, // Modified: Use swapper for Aftermath, wallet for SuiRewardsMe, else sender
+      database.addTxEvent({
+        sender: flag === "aftermath"
+          ? data.parsedJson.swapper
+          : data.parsedJson.wallet || data.sender,
         amount: outputAmount,
         endorser: null,
       }),
     ]);
   } catch (error) {
-    console.log("sendMessage err: ", error);
+    console.log("sendMessage err:", error);
   }
 };
 
