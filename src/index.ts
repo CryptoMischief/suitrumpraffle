@@ -454,29 +454,27 @@ export const sendTransactionMessage = async (
       message += `🎰 Market Cap: $${marketCap.toLocaleString()}\n`;
 
       // ✅ Safe DEX block
-      try {
-        const dexInfo: Record<string, { name: string; emoji: string }> = {
-          aftermath: { name: "Aftermath", emoji: "🦈" },
-          cetus: { name: "Cetus", emoji: "🐳" },
-          settle: { name: "BlueFin", emoji: "🐟" },
-          bluemove: { name: "BlueMove", emoji: "🌊" },
-          flowx: { name: "FlowX", emoji: "💧" },
-          suirewardsme: { name: "SuiRewardsMe", emoji: "🍃" },
-          router: { name: data?.parsedJson?.dex || "Router", emoji: "🔄" },
-        };
+try {
+  const dexInfo: Record<string, { name: string; emoji: string }> = {
+    aftermath: { name: "Aftermath", emoji: "🦈" },
+    cetus: { name: "Cetus", emoji: "🐳" },
+    settle: { name: "BlueFin", emoji: "🐟" },
+    bluemove: { name: "BlueMove", emoji: "🌊" },
+    flowx: { name: "FlowX", emoji: "💧" },
+    suirewardsme: { name: "SuiRewardsMe", emoji: "🍃" },
+    router: { name: data?.parsedJson?.dex || "Router", emoji: "🔄" },
+  };
 
-        const dex =
-          dexInfo?.[flag?.toLowerCase?.()] ??
-          { name: data?.parsedJson?.dex || flag?.toUpperCase?.() || "Unknown", emoji: "🔄" };
+  const dex =
+    dexInfo?.[flag?.toLowerCase?.()] ??
+    { name: data?.parsedJson?.dex || flag?.toUpperCase?.() || "Unknown", emoji: "🔄" };
 
-        message += `🌐 DEX: ${dex.name} ${dex.emoji}\n\n`;
-      } catch (err) {
-        console.warn("DEX block fallback used:", err);
-        message += "🌐 DEX: Router 🔄\n\n";
-      }
-    }
-
-    message += `🛰 TxDigest: <a href="https://suiscan.xyz/mainnet/tx/${data.id.txDigest}">
+  message += `🌐 DEX: ${dex.name} ${dex.emoji}\n\n`;
+} catch (err) {
+  console.warn("DEX block fallback used:", err);
+  message += "🌐 DEX: Router 🔄\n\n";
+}
+  message += `🛰 TxDigest: <a href="https://suiscan.xyz/mainnet/tx/${data.id.txDigest}">
 ${instance.shortenAddress(data.id.txDigest)}</a>\n\n`;
     message += `📈 Chart: <a href="${CHART}">DexScreener</a>\n`;
     message += `🔗 Links: <a href="${WEBSITE}">Website</a> | <a href="${TELEGRAM}">Telegram</a> | <a href="${TWITTER}">Twitter</a>`;
