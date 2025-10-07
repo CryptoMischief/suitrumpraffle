@@ -121,7 +121,7 @@ export const fetchRouterConfirmEvents = async (chatId: string) => {
   const tokenTradeEvents: any[] = [];
 
   try {
-    // ✅ Query BOTH router event types — SwapEvent and ConfirmSwapEvent
+    // ✅ Query BOTH router event types so no Cetus or BlueMove buy is missed
     const [swapRes, confirmRes] = await Promise.all([
       client.queryEvents({
         query: { MoveEventType: config.MOVE_EVENT_TYPE_CETUS_ROUTER },
@@ -135,28 +135,31 @@ export const fetchRouterConfirmEvents = async (chatId: string) => {
       }),
     ]);
 
-    // Combine both responses
+    // Merge both responses and ensure there’s something to process
     const allEvents = [...(swapRes.data || []), ...(confirmRes.data || [])];
     if (allEvents.length === 0) return;
 
-    allEvents.forEach((event) => {
+    // Filter to only SUITRUMP-related swaps
+    for (const event of allEvents) {
       const parsed = event.parsedJson as any;
       const tokenOut = parsed?.target?.name;
-      if (tokenOut !== config.TOKEN_ADDRESS) return;
+      if (tokenOut !== config.TOKEN_ADDRESS) continue;
 
       const tx = event.id.txDigest;
-      if (eventMapRouter.get(tx)) return;
+      if (eventMapRouter.get(tx)) continue; // Skip duplicates
       eventMapRouter.set(tx, true);
 
       tokenTradeEvents.push(event);
-    });
+    }
 
+    // Process new detected events
     for (const event of tokenTradeEvents) {
       const decIn = await getTokenMetadata("0x" + event.parsedJson.from.name);
       const decOut = await getTokenMetadata("0x" + event.parsedJson.target.name);
       const sender = event.sender;
+      const dex = event.parsedJson?.dex || "router";
 
-      console.log(`[router] Detected swap on tx: ${event.id.txDigest}`);
+      console.log(`[router - ${dex}] Detected swap on tx: ${event.id.txDigest}`);
 
       await index.sendTransactionMessage(
         chatId,
@@ -164,10 +167,12 @@ export const fetchRouterConfirmEvents = async (chatId: string) => {
         event,
         decIn,
         decOut,
-        "router"
+        dex.toLowerCase()
       );
     }
+
   } catch (err) {
+    if (String(err).includes("Could not find the referenced transaction events")) return;
     console.error("Error fetching router Swap/Confirm events:", err);
   }
 };
