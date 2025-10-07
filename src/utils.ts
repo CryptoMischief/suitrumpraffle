@@ -1,6 +1,8 @@
-export const sendMessageOption = {
+import TelegramBot from "node-telegram-bot-api";
+
+export const sendMessageOption: TelegramBot.SendMessageOptions = {
   disable_web_page_preview: true,
-  parse_mode: "HTML",
+  parse_mode: TelegramBot.ParseMode.HTML,  // Use the enum for type safety
 };
 
 export function calculateTime(time: number) {
