@@ -3,7 +3,7 @@ export const DEFAULT_TOKEN_DECIMALS = 6;
 
 export const TOKEN_NAME = "SUI TRUMP"
 export const MOVE_EVENT_TYPE_ROUTER_CONFIRM = "0x33ec64e9bb369bf045ddc198c81adbf2acab424da37465d95296ee02045d2b17::router::ConfirmSwapEvent";
-// Define the Move event type for swaps (e.g., Cetus, Kriya, or other DEX)
+export const MOVE_EVENT_TYPE_CETUS_ROUTER = "0x33ec64e9bb369bf045ddc198c81adbf2acab424da37465d95296ee02045d2b17::router::SwapEvent";
 //export const MOVE_EVENT_TYPE_CETUS_POOL = "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb::pool::SwapEvent"
 //export const MOVE_EVENT_TYPE_CETUS_ROUTER = "0x33ec64e9bb369bf045ddc198c81adbf2acab424da37465d95296ee02045d2b17::router::SwapEvent"
 export const MOVE_EVENT_TYPE_SETTLE = "0xe8f996ea6ff38c557c253d3b93cfe2ebf393816487266786371aa4532a9229f2::settle::Swap";
