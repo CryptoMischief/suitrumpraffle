@@ -2,7 +2,7 @@ import TelegramBot from "node-telegram-bot-api";
 
 export const sendMessageOption: TelegramBot.SendMessageOptions = {
   disable_web_page_preview: true,
-  parse_mode: TelegramBot.ParseMode.HTML,  // Use the enum for type safety
+  parse_mode: 'HTML',  // ✅ String literal—TS infers as ParseMode union
 };
 
 export function calculateTime(time: number) {
