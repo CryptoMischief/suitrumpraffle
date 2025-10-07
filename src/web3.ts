@@ -408,7 +408,7 @@ export const monitoringEvents = async (chatId: string) => {
     clearInterval(eventMonitorTimerId);
   }
 
-  eventMonitorTimerId = setInterval(() => monitoringEvents(chatId), 3000);
+  eventMonitorTimerId = setInterval(() => monitoringEvents(chatId), 13000);
 };
 
 export const getTokenMetadata = async (tokenAddress: string) => {
