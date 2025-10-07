@@ -117,7 +117,7 @@ export const fetchTokenTradeTransactionsSettle = async (chatId: string) => {
       }
     });
 
-    for (let i = 0; i <tokenTradeEvents.length; i++) {
+    for (let i = 0; i < tokenTradeEvents.length; i++) {
       const decimal_a = await getTokenMetadata(
         "0x" + tokenTradeEvents[i].parsedJson.coin_in.name
       );
