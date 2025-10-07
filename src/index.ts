@@ -461,7 +461,8 @@ export const sendTransactionMessage = async (
      suirewardsme: { name: "SuiRewardsMe", emoji: "🍃" },
      router: { name: data.parsedJson.dex || "Router", emoji: "🔄" },
     };
-    message += `🌐 DEX: ${dexInfo[flag].name} ${dexInfo[flag].emoji}\n\n`; // Added: Display DEX name with emoji after TxDigest
+    const dex = dexInfo[flag] || { name: data.parsedJson.dex || "Router", emoji: "🔄" };
+    message += `🌐 DEX: ${dex.name} ${dex.emoji}\n\n`;
     }
     message += `🛰 TxDigest: <a href="https://suiscan.xyz/mainnet/tx/${
       data.id.txDigest
