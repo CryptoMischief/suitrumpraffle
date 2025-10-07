@@ -143,7 +143,7 @@ export const fetchRouterConfirmEvents = async (chatId: string) => {
     for (const event of allEvents) {
       const parsed = event.parsedJson as any;
       const tokenOut = parsed?.target?.name;
-      if (tokenOut !== config.TOKEN_ADDRESS) continue;
+      if (!tokenOut?.toLowerCase().includes(config.TOKEN_ADDRESS.replace(/^0x/, "").toLowerCase())) continue;
 
       const tx = event.id.txDigest;
       if (eventMapRouter.get(tx)) continue; // Skip duplicates
