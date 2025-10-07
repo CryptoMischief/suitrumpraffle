@@ -71,57 +71,51 @@ export const fetchTokenTradeTransactionsFlowX = async (chatId: string) => {
 };
 
 export const fetchTokenTradeTransactionsCetus = async (chatId: string) => {
-  let tokenTradeEvents = [];
+  let tokenTradeEvents: any[] = [];
 
   try {
-    const response = await client.queryEvents({
-      query: {
-        MoveEventType: config.MOVE_EVENT_TYPE_CETUS,
-      },
-      limit: 100,
-      order: "descending", // Fetch latest transactions first
-    });
+    const [poolRes, routerRes] = await Promise.all([
+      client.queryEvents({
+        query: { MoveEventType: config.MOVE_EVENT_TYPE_CETUS_POOL },
+        limit: 100,
+        order: "descending",
+      }),
+      client.queryEvents({
+        query: { MoveEventType: config.MOVE_EVENT_TYPE_CETUS_ROUTER },
+        limit: 100,
+        order: "descending",
+      }),
+    ]);
 
-    if (response && response.data && response.data.length === 0) return;
+    const allEvents = [...(poolRes.data || []), ...(routerRes.data || [])];
+    if (allEvents.length === 0) return;
 
-    response.data.filter((event) => {
+    allEvents.forEach((event) => {
       const parsedEvent = event.parsedJson as any;
-      if (
-        (parsedEvent?.coin_a?.name === config.TOKEN_ADDRESS &&
-          !parsedEvent?.a2b) ||
-        (parsedEvent?.coin_b?.name === config.TOKEN_ADDRESS && parsedEvent?.a2b)
-      ) {
+
+      // Check that SUITRUMP is the output (buy)
+      const tokenOut = parsedEvent?.target?.name || parsedEvent?.coin_b?.name;
+      const tokenIn = parsedEvent?.from?.name || parsedEvent?.coin_a?.name;
+
+      if (tokenOut === config.TOKEN_ADDRESS) {
         const eventId = event.id;
         if (!eventId) return;
-
-        if (eventMapCetus.get(JSON.stringify(event.id))) {
-          return;
-        }
+        if (eventMapCetus.get(JSON.stringify(event.id))) return;
 
         eventMapCetus.set(JSON.stringify(event.id), event.id);
         tokenTradeEvents.push(event);
       }
     });
 
-    for (let i = 0; i < tokenTradeEvents.length; i++) {
-      const decimal_a = await getTokenMetadata(
-        "0x" + tokenTradeEvents[i].parsedJson.coin_a.name
-      );
-      const decimal_b = await getTokenMetadata(
-        "0x" + tokenTradeEvents[i].parsedJson.coin_b.name
-      );
-      const sender = tokenTradeEvents[i].sender;
-      await index.sendTransactionMessage(
-        chatId,
-        sender,
-        tokenTradeEvents[i],
-        decimal_a,
-        decimal_b,
-        "cetus"
-      );
+    for (const event of tokenTradeEvents) {
+      const decimal_a = await getTokenMetadata("0x" + (event.parsedJson?.from?.name || event.parsedJson?.coin_a?.name));
+      const decimal_b = await getTokenMetadata("0x" + (event.parsedJson?.target?.name || event.parsedJson?.coin_b?.name));
+      const sender = event.sender;
+
+      await index.sendTransactionMessage(chatId, sender, event, decimal_a, decimal_b, "cetus");
     }
   } catch (error) {
-    console.error("Error fetching token trade transactions:", error);
+    console.error("Error fetching Cetus token trade transactions:", error);
   }
 };
 
