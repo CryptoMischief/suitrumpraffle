@@ -208,10 +208,10 @@ export const sendTransactionMessage = async (
     message = `📌 ${TOKEN_NAME} BUY \n\n`;
 
     // ✅ Safeguarded DEX parsing
-    if (flag === "cetus" || flag === "bluemove") {
+     if (flag === "cetus" || flag === "bluemove") {
       const a2b = data?.parsedJson?.a2b;
-      const coinA = data?.parsedJson?.coin_a?.name || "";
-      const coinB = data?.parsedJson?.coin_b?.name || "";
+      const coinA = data?.parsedJson?.coin_a?.name || data?.parsedJson?.coin_in?.name || "";
+      const coinB = data?.parsedJson?.coin_b?.name || data?.parsedJson?.coin_out?.name || "";
       inputAmount = (data?.parsedJson?.amount_in || 0) / 10 ** decimal_a;
       inputSymbol = (a2b ? coinA : coinB).split("::").pop() || "UNKNOWN";
       outputAmount = (data?.parsedJson?.amount_out || 0) / 10 ** decimal_b;
