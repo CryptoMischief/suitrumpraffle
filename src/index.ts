@@ -460,8 +460,10 @@ export const sendTransactionMessage = async (
      flowx: { name: "FlowX", emoji: "💧" },
      suirewardsme: { name: "SuiRewardsMe", emoji: "🍃" },
      router: { name: data.parsedJson.dex || "Router", emoji: "🔄" },
-    };
-    const dex = dexInfo[flag] || { name: data.parsedJson.dex || "Router", emoji: "🔄" };
+   };
+
+// new safe version ✅
+    const dex = dexInfo[flag] || { name: data.parsedJson?.dex || flag?.toUpperCase() || "Unknown", emoji: "🔄" };
     message += `🌐 DEX: ${dex.name} ${dex.emoji}\n\n`;
     }
     message += `🛰 TxDigest: <a href="https://suiscan.xyz/mainnet/tx/${
