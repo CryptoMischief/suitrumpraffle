@@ -1,6 +1,6 @@
 export const sendMessageOption = {
   disable_web_page_preview: true,
-  parse_mode: "HTML",
+  parse_mode: "HTML" as const, // 👈 cast as const
 };
 
 export function calculateTime(time: number) {
