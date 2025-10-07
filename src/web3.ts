@@ -121,15 +121,25 @@ export const fetchRouterConfirmEvents = async (chatId: string) => {
   const tokenTradeEvents: any[] = [];
 
   try {
-    const response = await client.queryEvents({
-      query: { MoveEventType: config.MOVE_EVENT_TYPE_ROUTER_CONFIRM },
-      limit: 100,
-      order: "descending",
-    });
+    // ✅ Query BOTH router event types — SwapEvent and ConfirmSwapEvent
+    const [swapRes, confirmRes] = await Promise.all([
+      client.queryEvents({
+        query: { MoveEventType: config.MOVE_EVENT_TYPE_CETUS_ROUTER },
+        limit: 100,
+        order: "descending",
+      }),
+      client.queryEvents({
+        query: { MoveEventType: config.MOVE_EVENT_TYPE_ROUTER_CONFIRM },
+        limit: 100,
+        order: "descending",
+      }),
+    ]);
 
-    if (!response?.data?.length) return;
+    // Combine both responses
+    const allEvents = [...(swapRes.data || []), ...(confirmRes.data || [])];
+    if (allEvents.length === 0) return;
 
-    response.data.forEach((event) => {
+    allEvents.forEach((event) => {
       const parsed = event.parsedJson as any;
       const tokenOut = parsed?.target?.name;
       if (tokenOut !== config.TOKEN_ADDRESS) return;
@@ -146,19 +156,21 @@ export const fetchRouterConfirmEvents = async (chatId: string) => {
       const decOut = await getTokenMetadata("0x" + event.parsedJson.target.name);
       const sender = event.sender;
 
+      console.log(`[router] Detected swap on tx: ${event.id.txDigest}`);
+
       await index.sendTransactionMessage(
         chatId,
         sender,
         event,
         decIn,
         decOut,
-        "router" // label for message
+        "router"
       );
     }
   } catch (err) {
-    console.error("Error fetching router ConfirmSwapEvents:", err);
+    console.error("Error fetching router Swap/Confirm events:", err);
   }
-}; 
+};
 
 export const fetchTokenTradeTransactionsSettle = async (chatId: string) => {
   let tokenTradeEvents = [];
