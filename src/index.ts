@@ -207,14 +207,16 @@ export const sendTransactionMessage = async (
   try {
     message = `📌 ${TOKEN_NAME} BUY \n\n`;
 
-    // ✅ Safeguarded DEX parsing
-     if (flag === "cetus" || flag === "bluemove") {
-      const a2b = data?.parsedJson?.a2b;
-      const coinA = data?.parsedJson?.coin_a?.name || data?.parsedJson?.coin_in?.name || "";
-      const coinB = data?.parsedJson?.coin_b?.name || data?.parsedJson?.coin_out?.name || "";
-      inputAmount = (data?.parsedJson?.amount_in || 0) / 10 ** decimal_a;
+    // ✅ Safeguarded DEX parsing with fallbacks for pool/router structures
+    if (flag === "cetus" || flag === "bluemove") {
+      const a2b = data?.parsedJson?.a2b ?? false;  // Default false if missing
+      const coinA = data?.parsedJson?.coin_a?.name || data?.parsedJson?.from?.name || data?.parsedJson?.coin_in?.name || "";
+      const coinB = data?.parsedJson?.coin_b?.name || data?.parsedJson?.target?.name || data?.parsedJson?.coin_out?.name || "";
+      const amountIn = data?.parsedJson?.amount_in || data?.parsedJson?.amountA || 0;
+      const amountOut = data?.parsedJson?.amount_out || data?.parsedJson?.amountB || 0;
+      inputAmount = amountIn / 10 ** decimal_a;
       inputSymbol = (a2b ? coinA : coinB).split("::").pop() || "UNKNOWN";
-      outputAmount = (data?.parsedJson?.amount_out || 0) / 10 ** decimal_b;
+      outputAmount = amountOut / 10 ** decimal_b;
     } else if (flag === "settle" || flag === "flowx") {
       const coinIn = data?.parsedJson?.coin_in?.name || "";
       inputAmount = (data?.parsedJson?.amount_in || 0) / 10 ** decimal_a;
@@ -279,10 +281,10 @@ ${instance.shortenAddress(data.id.txDigest)}</a>\n\n`;
     message += `📈 Chart: <a href="${CHART}">DexScreener</a>\n`;
     message += `🔗 Links: <a href="${WEBSITE}">Website</a> | <a href="${TELEGRAM}">Telegram</a> | <a href="${TWITTER}">Twitter</a>`;
 
-    // ✅ Use typed ParseMode for sendVideo
+    // ✅ Use string literal for parse_mode—TS-safe
     const videoOptions: TelegramBot.SendVideoOptions = {
       caption: message,
-      parse_mode: TelegramBot.ParseMode.HTML,
+      parse_mode: 'HTML',
     };
 
     await Promise.all([
@@ -291,7 +293,7 @@ ${instance.shortenAddress(data.id.txDigest)}</a>\n\n`;
         sender:
           flag === "aftermath"
             ? data.parsedJson.swapper
-            : data.parsedJson.wallet || data.sender,
+            : data.parsedJson.wallet || data.parsedJson.swapper || data.sender,  // ✅ Added swapper fallback
         amount: outputAmount,
         endorser: null,
       }),
