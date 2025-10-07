@@ -15,6 +15,7 @@ let eventMapRouter = new Map<string, any>(); // rename from eventMapCetus for cl
 let eventMapSettle = new Map<string, any>();
 let eventMapSuiRewardsMe = new Map<string, any>(); // Added: Map to track SuiRewardsMe events to avoid duplicates
 let eventMapAftermath = new Map<string, any>(); // Added: Map to track Aftermath events to avoid duplicates
+let eventMapBlueMove = new Map<string, any>(); // Added: Map to track BlueMove events to avoid duplicates
 
 export let eventMonitorTimerId = null;
 
@@ -136,28 +137,38 @@ export const fetchRouterConfirmEvents = async (chatId: string) => {
     ]);
 
     // Merge both responses and ensure there’s something to process
-    const allEvents = [...(swapRes.data || []), ...(confirmRes.data || [])];
+    let allEvents = [...(swapRes.data || []), ...(confirmRes.data || [])];
     if (allEvents.length === 0) return;
 
-    // Filter to only SUITRUMP-related swaps
+    // Filter to only SUITRUMP-related swaps (robust: check multiple output fields, exact match)
     for (const event of allEvents) {
       const parsed = event.parsedJson as any;
-      const tokenOut = parsed?.target?.name;
-      if (!tokenOut?.toLowerCase().includes(config.TOKEN_ADDRESS.replace(/^0x/, "").toLowerCase())) continue;
+      let tokenOut = parsed?.target?.name || parsed?.coin_out?.name || parsed?.coin_b?.name || parsed?.type_out || '';
+
+      if (tokenOut !== config.TOKEN_ADDRESS) continue;  // ✅ Exact match (no includes—safer)
 
       const tx = event.id.txDigest;
       if (eventMapRouter.get(tx)) continue; // Skip duplicates
       eventMapRouter.set(tx, true);
+
+      // ✅ Tag source for DEX detection (Cetus swaps get "cetus" flag)
+      if (event.timestampMs === swapRes.data?.find(e => e.id === event.id)?.timestampMs) {
+        event._tempDex = 'cetus';  // Temporary tag for Cetus swap events
+      } else {
+        event._tempDex = parsed?.dex || 'router';  // Fallback for confirm events
+      }
 
       tokenTradeEvents.push(event);
     }
 
     // Process new detected events
     for (const event of tokenTradeEvents) {
-      const decIn = await getTokenMetadata("0x" + event.parsedJson.from.name);
-      const decOut = await getTokenMetadata("0x" + event.parsedJson.target.name);
-      const sender = event.sender;
-      const dex = event.parsedJson?.dex || "router";
+      const decIn = await getTokenMetadata("0x" + (event.parsedJson.from?.name || event.parsedJson.coin_a?.name || event.parsedJson.coin_in?.name || ''));
+      const decOut = await getTokenMetadata("0x" + config.TOKEN_ADDRESS);  // Output is always SUITRUMP
+      const sender = event.parsedJson?.wallet || event.parsedJson?.swapper || event.sender;
+      const dex = event._tempDex || event.parsedJson?.dex || "router";  // Use tag/fallback
+
+      delete event._tempDex;  // Clean up temp field
 
       console.log(`[router - ${dex}] Detected swap on tx: ${event.id.txDigest}`);
 
@@ -227,7 +238,7 @@ export const fetchTokenTradeTransactionsSettle = async (chatId: string) => {
   }
 };
 
-/*export const fetchTokenTradeTransactionsBlueMove = async (chatId: string) => {
+export const fetchTokenTradeTransactionsBlueMove = async (chatId: string) => {  // Uncommented: Full BlueMove fetch
   let tokenTradeEvents = [];
 
   try {
@@ -278,9 +289,9 @@ export const fetchTokenTradeTransactionsSettle = async (chatId: string) => {
       );
     }
   } catch (error) {
-    console.error("Error fetching token trade transactions:", error);
+    console.error("Error fetching BlueMove token trade transactions:", error);
   }
-}; */
+};
 
 // Added: Function to fetch and process SuiRewardsMe swap events
 export const fetchTokenTradeTransactionsSuiRewardsMe = async (chatId: string) => {
@@ -349,8 +360,8 @@ export const fetchTokenTradeTransactionsAftermath = async (chatId: string) => {
 
     response.data.filter((event) => {
       const parsedEvent = event.parsedJson as any;
-      // Modified: Normalize type_out and TOKEN_ADDRESS for comparison
-      if (parsedEvent?.type_out?.toLowerCase().trim() === config.TOKEN_ADDRESS.toLowerCase().trim()) {
+      // Modified: Exact match for consistency
+      if (parsedEvent?.type_out === config.TOKEN_ADDRESS) {
         const eventId = event.id;
         if (!eventId) return;
 
@@ -445,10 +456,11 @@ export const monitoringEvents = async (chatId: string) => {
 
 try {
   await Promise.all([
-    fetchRouterConfirmEvents(chatId),        // ✅ unified router watcher
+    fetchRouterConfirmEvents(chatId),        // ✅ unified router watcher (now catches Cetus properly)
     fetchTokenTradeTransactionsSettle(chatId),
     fetchTokenTradeTransactionsSuiRewardsMe(chatId),
     fetchTokenTradeTransactionsAftermath(chatId),
+    fetchTokenTradeTransactionsBlueMove(chatId),  // ✅ Added: BlueMove watcher
 ]);
   } catch (err) {
     console.log("monitoringEvents err: ", err);
