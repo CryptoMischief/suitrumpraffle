@@ -11,16 +11,14 @@ dotenv.config();
 const RPC_URL = process.env.RPC_URL;
 const client = new SuiClient({ url: RPC_URL });
 
-let eventMapCetus = new Map<string, any>();
+let eventMapRouter = new Map<string, any>(); // rename from eventMapCetus for clarity
 let eventMapSettle = new Map<string, any>();
-let eventMapBlueMove = new Map<string, any>();
-let eventMapFlowX = new Map<string, any>();
 let eventMapSuiRewardsMe = new Map<string, any>(); // Added: Map to track SuiRewardsMe events to avoid duplicates
 let eventMapAftermath = new Map<string, any>(); // Added: Map to track Aftermath events to avoid duplicates
 
 export let eventMonitorTimerId = null;
 
-export const fetchTokenTradeTransactionsFlowX = async (chatId: string) => {
+/*export const fetchTokenTradeTransactionsFlowX = async (chatId: string) => {
   let tokenTradeEvents = [];
   try {
     const response = await client.queryEvents({
@@ -68,9 +66,9 @@ export const fetchTokenTradeTransactionsFlowX = async (chatId: string) => {
   } catch (error) {
     console.error("Error fetching FlowX token trade transactions:", error);
   }
-};
+}; */
 
-export const fetchTokenTradeTransactionsCetus = async (chatId: string) => {
+/*export const fetchTokenTradeTransactionsCetus = async (chatId: string) => {
   let tokenTradeEvents: any[] = [];
 
   try {
@@ -118,6 +116,49 @@ export const fetchTokenTradeTransactionsCetus = async (chatId: string) => {
     console.error("Error fetching Cetus token trade transactions:", error);
   }
 };
+*/
+export const fetchRouterConfirmEvents = async (chatId: string) => {
+  const tokenTradeEvents: any[] = [];
+
+  try {
+    const response = await client.queryEvents({
+      query: { MoveEventType: config.MOVE_EVENT_TYPE_ROUTER_CONFIRM },
+      limit: 100,
+      order: "descending",
+    });
+
+    if (!response?.data?.length) return;
+
+    response.data.forEach((event) => {
+      const parsed = event.parsedJson as any;
+      const tokenOut = parsed?.target?.name;
+      if (tokenOut !== config.TOKEN_ADDRESS) return;
+
+      const tx = event.id.txDigest;
+      if (eventMapRouter.get(tx)) return;
+      eventMapRouter.set(tx, true);
+
+      tokenTradeEvents.push(event);
+    });
+
+    for (const event of tokenTradeEvents) {
+      const decIn = await getTokenMetadata("0x" + event.parsedJson.from.name);
+      const decOut = await getTokenMetadata("0x" + event.parsedJson.target.name);
+      const sender = event.sender;
+
+      await index.sendTransactionMessage(
+        chatId,
+        sender,
+        event,
+        decIn,
+        decOut,
+        "router" // label for message
+      );
+    }
+  } catch (err) {
+    console.error("Error fetching router ConfirmSwapEvents:", err);
+  }
+}; 
 
 export const fetchTokenTradeTransactionsSettle = async (chatId: string) => {
   let tokenTradeEvents = [];
@@ -169,7 +210,7 @@ export const fetchTokenTradeTransactionsSettle = async (chatId: string) => {
   }
 };
 
-export const fetchTokenTradeTransactionsBlueMove = async (chatId: string) => {
+/*export const fetchTokenTradeTransactionsBlueMove = async (chatId: string) => {
   let tokenTradeEvents = [];
 
   try {
@@ -222,7 +263,7 @@ export const fetchTokenTradeTransactionsBlueMove = async (chatId: string) => {
   } catch (error) {
     console.error("Error fetching token trade transactions:", error);
   }
-};
+}; */
 
 // Added: Function to fetch and process SuiRewardsMe swap events
 export const fetchTokenTradeTransactionsSuiRewardsMe = async (chatId: string) => {
@@ -385,15 +426,13 @@ export const getSuitrumpMarketCap = async () => {
 export const monitoringEvents = async (chatId: string) => {
   // console.log("monitoring...");
 
-  try {
-    await Promise.all([
-      fetchTokenTradeTransactionsCetus(chatId),
-      fetchTokenTradeTransactionsSettle(chatId),
-      fetchTokenTradeTransactionsBlueMove(chatId),
-      fetchTokenTradeTransactionsFlowX(chatId), // Add FlowX
-      fetchTokenTradeTransactionsSuiRewardsMe(chatId), // Added: Include SuiRewardsMe event monitoring
-      fetchTokenTradeTransactionsAftermath(chatId), // Added: Include Aftermath event monitoring
-    ]);
+try {
+  await Promise.all([
+    fetchRouterConfirmEvents(chatId),        // ✅ unified router watcher
+    fetchTokenTradeTransactionsSettle(chatId),
+    fetchTokenTradeTransactionsSuiRewardsMe(chatId),
+    fetchTokenTradeTransactionsAftermath(chatId),
+]);
   } catch (err) {
     console.log("monitoringEvents err: ", err);
   }
