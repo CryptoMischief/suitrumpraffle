@@ -152,10 +152,11 @@ export const fetchRouterConfirmEvents = async (chatId: string) => {
       eventMapRouter.set(tx, true);
 
       // ✅ Tag source for DEX detection (Cetus swaps get "cetus" flag)
-      if (event.timestampMs === swapRes.data?.find(e => e.id === event.id)?.timestampMs) {
-        event._tempDex = 'cetus';  // Temporary tag for Cetus swap events
+      (event as any)._tempDex = 'router';  // TS bypass: temp prop
+      if (swapRes.data?.some((e: any) => e.id === event.id)) {
+        (event as any)._tempDex = 'cetus';  // Temporary tag for Cetus swap events
       } else {
-        event._tempDex = parsed?.dex || 'router';  // Fallback for confirm events
+        (event as any)._tempDex = parsed?.dex || 'router';  // Fallback for confirm events
       }
 
       tokenTradeEvents.push(event);
@@ -166,9 +167,9 @@ export const fetchRouterConfirmEvents = async (chatId: string) => {
       const decIn = await getTokenMetadata("0x" + (event.parsedJson.from?.name || event.parsedJson.coin_a?.name || event.parsedJson.coin_in?.name || ''));
       const decOut = await getTokenMetadata("0x" + config.TOKEN_ADDRESS);  // Output is always SUITRUMP
       const sender = event.parsedJson?.wallet || event.parsedJson?.swapper || event.sender;
-      const dex = event._tempDex || event.parsedJson?.dex || "router";  // Use tag/fallback
+      const dex = (event as any)._tempDex || event.parsedJson?.dex || "router";  // Use tag/fallback
 
-      delete event._tempDex;  // Clean up temp field
+      delete (event as any)._tempDex;  // Clean up temp field
 
       console.log(`[router - ${dex}] Detected swap on tx: ${event.id.txDigest}`);
 
