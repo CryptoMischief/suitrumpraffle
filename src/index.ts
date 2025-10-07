@@ -424,6 +424,10 @@ export const sendTransactionMessage = async (
       inputAmount = data.parsedJson.amount_in / 10 ** decimal_a; // Added: Use amount_in for input amount
       inputSymbol = data.parsedJson.type_in.split("::").pop(); // Added: Use type_in for input token symbol
       outputAmount = data.parsedJson.amount_out / 10 ** decimal_b; // Added: Use amount_out for output amount
+    } else if (flag === "router") {
+      inputAmount = data.parsedJson.amount_in / 10 ** decimal_a;
+      inputSymbol = data.parsedJson.from.name.split("::").pop();
+      outputAmount = data.parsedJson.amount_out / 10 ** decimal_b;
     } else {
       return;
     }
@@ -449,12 +453,13 @@ export const sendTransactionMessage = async (
 
       // Added: Map flag to DEX name and emoji
     const dexInfo = {
-      aftermath: { name: "Aftermath", emoji: "🦈" },
-      cetus: { name: "Cetus", emoji: "🐳" },
-      settle: { name: "BlueFin", emoji: "🐟" },
-      bluemove: { name: "BlueMove", emoji: "🌊" },
-      flowx: { name: "FlowX", emoji: "💧" },
-      suirewardsme: { name: "SuiRewardsMe", emoji: "🍃" },
+     aftermath: { name: "Aftermath", emoji: "🦈" },
+     cetus: { name: "Cetus", emoji: "🐳" },
+     settle: { name: "BlueFin", emoji: "🐟" },
+     bluemove: { name: "BlueMove", emoji: "🌊" },
+     flowx: { name: "FlowX", emoji: "💧" },
+     suirewardsme: { name: "SuiRewardsMe", emoji: "🍃" },
+     router: { name: data.parsedJson.dex || "Router", emoji: "🔄" },
     };
     message += `🌐 DEX: ${dexInfo[flag].name} ${dexInfo[flag].emoji}\n\n`; // Added: Display DEX name with emoji after TxDigest
     }
