@@ -451,27 +451,28 @@ export const sendTransactionMessage = async (
     if (marketCap !== null) {
       message += `🎰 Market Cap: $${marketCap.toLocaleString()}\n`;
 
-      // Added: Map flag to DEX name and emoji
-    try {
-  const dexInfo: Record<string, { name: string; emoji: string }> = {
-    aftermath: { name: "Aftermath", emoji: "🦈" },
-    cetus: { name: "Cetus", emoji: "🐳" },
-    settle: { name: "BlueFin", emoji: "🐟" },
-    bluemove: { name: "BlueMove", emoji: "🌊" },
-    flowx: { name: "FlowX", emoji: "💧" },
-    suirewardsme: { name: "SuiRewardsMe", emoji: "🍃" },
-    router: { name: data?.parsedJson?.dex || "Router", emoji: "🔄" },
-  };
+      // Added: Map flag to DEX name and emoji (safe block)
+      try {
+        const dexInfo: Record<string, { name: string; emoji: string }> = {
+          aftermath: { name: "Aftermath", emoji: "🦈" },
+          cetus: { name: "Cetus", emoji: "🐳" },
+          settle: { name: "BlueFin", emoji: "🐟" },
+          bluemove: { name: "BlueMove", emoji: "🌊" },
+          flowx: { name: "FlowX", emoji: "💧" },
+          suirewardsme: { name: "SuiRewardsMe", emoji: "🍃" },
+          router: { name: data?.parsedJson?.dex || "Router", emoji: "🔄" },
+        };
 
-  const dex =
-    dexInfo?.[flag?.toLowerCase?.()] ??
-    { name: data?.parsedJson?.dex || flag?.toUpperCase?.() || "Unknown", emoji: "🔄" };
+        const dex =
+          dexInfo?.[flag?.toLowerCase?.()] ??
+          { name: data?.parsedJson?.dex || flag?.toUpperCase?.() || "Unknown", emoji: "🔄" };
 
-  message += `🌐 DEX: ${dex.name} ${dex.emoji}\n\n`;
-} catch (err) {
-  console.warn("DEX block fallback used:", err);
-  message += "🌐 DEX: Router 🔄\n\n";
-}
+        message += `🌐 DEX: ${dex.name} ${dex.emoji}\n\n`;
+      } catch (err) {
+        console.warn("DEX block fallback used:", err);
+        message += "🌐 DEX: Router 🔄\n\n";
+      }
+    }
     message += `🛰 TxDigest: <a href="https://suiscan.xyz/mainnet/tx/${
       data.id.txDigest
     }">${instance.shortenAddress(data.id.txDigest)}</a>\n\n`;
