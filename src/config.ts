@@ -2,14 +2,11 @@ export const LIMIT_COUNT = 5
 export const DEFAULT_TOKEN_DECIMALS = 6;
 
 export const TOKEN_NAME = "SUI TRUMP"
-export const MOVE_EVENT_TYPE_ROUTER_CONFIRM = "0x33ec64e9bb369bf045ddc198c81adbf2acab424da37465d95296ee02045d2b17::router::ConfirmSwapEvent";
-export const MOVE_EVENT_TYPE_CETUS_ROUTER = "0x33ec64e9bb369bf045ddc198c81adbf2acab424da37465d95296ee02045d2b17::router::SwapEvent";
-//export const MOVE_EVENT_TYPE_CETUS_POOL = "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb::pool::SwapEvent"
-//export const MOVE_EVENT_TYPE_CETUS_ROUTER = "0x33ec64e9bb369bf045ddc198c81adbf2acab424da37465d95296ee02045d2b17::router::SwapEvent"
+// Define the Move event type for swaps (e.g., Cetus, Kriya, or other DEX)
+export const MOVE_EVENT_TYPE_CETUS = "0xeffc8ae61f439bb34c9b905ff8f29ec56873dcedf81c7123ff2f1f67c45ec302::cetus::CetusSwapEvent";
 export const MOVE_EVENT_TYPE_SETTLE = "0xe8f996ea6ff38c557c253d3b93cfe2ebf393816487266786371aa4532a9229f2::settle::Swap";
-//export const MOVE_EVENT_TYPE_BLUEMOVE = "0x764b8132a94d35abc9dfd91b23a0757b2a717d5ecb04c03098794aa2a508db91::bluemove::BlueMoveSwapEvent";
-export const MOVE_EVENT_TYPE_BLUEMOVE = "0x764b8132a94d35abc9dfd91b23a0757b2a717d5ecb04c03098794aa2a508db91::bluemove::BlueMoveSwapEvent"; // Uncommented: BlueMove swap events
-//export const MOVE_EVENT_TYPE_FLOWX = "0xc263060d3cbb4155057f0010f92f63ca56d5121c298d01f7a33607342ec299b0::universal_router::Swap";
+export const MOVE_EVENT_TYPE_BLUEMOVE = "0x764b8132a94d35abc9dfd91b23a0757b2a717d5ecb04c03098794aa2a508db91::bluemove::BlueMoveSwapEvent";
+export const MOVE_EVENT_TYPE_FLOWX = "0xc263060d3cbb4155057f0010f92f63ca56d5121c298d01f7a33607342ec299b0::universal_router::Swap";
 export const MOVE_EVENT_TYPE_SUIREWARDSME = "0x05f51d02fa049194239ffeac3e446a0020e7bbfc5d9149ff888366c24b2456b1::SRMV1::Swapped";
 export const MOVE_EVENT_TYPE_AFTERMATH = "0xd675e6d727bb2d63087cc12008bb91e399dc7570100f72051993ec10c0428f4a::events::SwapCompletedEventV2"; // Added: Event type for Aftermath swaps
 
