@@ -47,38 +47,26 @@ const bot = new TelegramBot(token, {
 });
 
 bot.getMe().then((me) => {
-  console.log("legend, me = ", me);
+  console.log("legend, me =", me);
   botUsername = me.username;
 });
 
 const botCommands = [
   { command: "/start", description: "Start Monitoring (Group Owner Only)" },
   { command: "/stop", description: "Stop Monitoring (Group Owner Only)" },
-  {
-    command: "/startraffle",
-    description: "Start Raffle (Admin, e.g., /startraffle 50 24)",
-  },
-  {
-    command: "/addtickets",
-    description: "Add Tickets (Admin, e.g., /addtickets 0x123 100)",
-  },
-  {
-    command: "/endorse",
-    description: "Endorse user (e.g., /endorse @SuiNs message)",
-  },
+  { command: "/startraffle", description: "Start Raffle (Admin, e.g., /startraffle 50 24)" },
+  { command: "/addtickets", description: "Add Tickets (Admin, e.g., /addtickets 0x123 100)" },
+  { command: "/endorse", description: "Endorse user (e.g., /endorse @SuiNs message)" },
   { command: "/rafflestats", description: "Show Raffle Stats" },
   { command: "/leaderboard", description: "Show Top Holders" },
   { command: "/ticket", description: "Check Tickets (e.g., /ticket 0x123)" },
   { command: "/help", description: "Show Commands" },
 ];
 
-bot
-  .setMyCommands(botCommands)
-  .then(() => console.log("Commands set!"))
-  .catch(console.error);
+bot.setMyCommands(botCommands).then(() => console.log("Commands set!")).catch(console.error);
 
 /* ================================
-   Helper functions (defined first)
+   Helper functions
 ================================== */
 
 const isAdminMsg = async (msg: any) => {
@@ -128,10 +116,8 @@ async function getGroupOwner(chatId: string) {
 const scheduleMessage = async (chatId: string, date: Date) => {
   const now = new Date();
   const delay = date.getTime() - now.getTime();
-  if (delay < 0) {
-    console.log("Scheduled time is in the past. Message not sent.");
-    return;
-  }
+  if (delay < 0) return;
+
   setTimeout(async () => {
     try {
       const address = await database.getRaffleWinner();
@@ -140,6 +126,7 @@ const scheduleMessage = async (chatId: string, date: Date) => {
       const messageContent = `🔴 Raffle has ended!
 🏆 Winner: <code>${suins}</code>
 💰 Prize: ${raffle?.prize ?? "Unknown"} SUI`;
+
       await bot.sendMessage(
         chatId,
         messageContent,
@@ -153,7 +140,7 @@ const scheduleMessage = async (chatId: string, date: Date) => {
 };
 
 /* ================================
-   Main bot listener
+   Message Listener
 ================================== */
 
 bot.on("message", async (message) => {
@@ -161,9 +148,7 @@ bot.on("message", async (message) => {
     const session = initSession(message);
     if (!message.entities) return;
 
-    const commandEntity = message.entities.find(
-      (entity) => entity.type === "bot_command"
-    );
+    const commandEntity = message.entities.find((e) => e.type === "bot_command");
     if (!commandEntity) return;
 
     const commandFresh = (message.text as string).substring(
@@ -172,44 +157,25 @@ bot.on("message", async (message) => {
     );
     const command = commandFresh.replace(`@${botUsername}`, "");
 
-    // Start
     if (command === BOT_COMMAND_START) {
       if (await isAdminMsg(message)) {
-        await bot.sendMessage(
-          session.chatId,
-          "✅ Successfully started!",
-          instance.sendMessageOption as TelegramBot.SendMessageOptions
-        );
+        await bot.sendMessage(session.chatId, "✅ Successfully started!", instance.sendMessageOption);
         await monitoringEvents(session.chatId);
       }
-    }
-    // Stop
-    else if (command === BOT_COMMAND_STOP) {
+    } else if (command === BOT_COMMAND_STOP) {
       if (await isAdminMsg(message)) {
         clearInterval(eventMonitorTimerId);
-        await bot.sendMessage(
-          session.chatId,
-          "✅ Successfully stopped!",
-          instance.sendMessageOption as TelegramBot.SendMessageOptions
-        );
+        await bot.sendMessage(session.chatId, "✅ Successfully stopped!", instance.sendMessageOption);
       }
+    } else if (command === BOT_COMMAND_HELP) {
+      await bot.sendMessage(session.chatId, instance.getHelpMessage(), instance.sendMessageOption);
     }
-    // Help
-    else if (command === BOT_COMMAND_HELP) {
-      await bot.sendMessage(
-        session.chatId,
-        instance.getHelpMessage(),
-        instance.sendMessageOption as TelegramBot.SendMessageOptions
-      );
-    }
-    // Other commands unchanged...
-    // (your raffle, ticket, leaderboard, etc. logic remains intact)
   } catch (error) {
     try {
       await bot.sendMessage(
         message.chat.id,
-        `😢 Sorry, Something went wrong! Please try again later!\n Error 1`,
-        instance.sendMessageOption as TelegramBot.SendMessageOptions
+        `😢 Sorry, something went wrong! Please try again later.`,
+        instance.sendMessageOption
       );
     } catch (error2) {
       console.log("message:", error2);
@@ -218,7 +184,7 @@ bot.on("message", async (message) => {
 });
 
 /* ================================
-   Transaction Message Handler
+   Transaction Handler
 ================================== */
 
 export const sendTransactionMessage = async (
@@ -241,28 +207,34 @@ export const sendTransactionMessage = async (
   try {
     message = `📌 ${TOKEN_NAME} BUY \n\n`;
 
+    // ✅ Safeguarded DEX parsing
     if (flag === "cetus" || flag === "bluemove") {
-      inputAmount = data.parsedJson.amount_in / 10 ** decimal_a;
-      inputSymbol = data.parsedJson.a2b
-        ? data.parsedJson.coin_a.name.split("::").pop()
-        : data.parsedJson.coin_b.name.split("::").pop();
-      outputAmount = data.parsedJson.amount_out / 10 ** decimal_b;
+      const a2b = data?.parsedJson?.a2b;
+      const coinA = data?.parsedJson?.coin_a?.name || "";
+      const coinB = data?.parsedJson?.coin_b?.name || "";
+      inputAmount = (data?.parsedJson?.amount_in || 0) / 10 ** decimal_a;
+      inputSymbol = (a2b ? coinA : coinB).split("::").pop() || "UNKNOWN";
+      outputAmount = (data?.parsedJson?.amount_out || 0) / 10 ** decimal_b;
     } else if (flag === "settle" || flag === "flowx") {
-      inputAmount = data.parsedJson.amount_in / 10 ** decimal_a;
-      inputSymbol = data.parsedJson.coin_in.name.split("::").pop();
-      outputAmount = data.parsedJson.amount_out / 10 ** decimal_b;
+      const coinIn = data?.parsedJson?.coin_in?.name || "";
+      inputAmount = (data?.parsedJson?.amount_in || 0) / 10 ** decimal_a;
+      inputSymbol = coinIn.split("::").pop() || "UNKNOWN";
+      outputAmount = (data?.parsedJson?.amount_out || 0) / 10 ** decimal_b;
     } else if (flag === "suirewardsme") {
-      inputAmount = data.parsedJson.amountin / 10 ** decimal_a;
-      inputSymbol = data.parsedJson.tokenin.name.split("::").pop();
-      outputAmount = data.parsedJson.amountout / 10 ** decimal_b;
+      const tokenIn = data?.parsedJson?.tokenin?.name || "";
+      inputAmount = (data?.parsedJson?.amountin || 0) / 10 ** decimal_a;
+      inputSymbol = tokenIn.split("::").pop() || "UNKNOWN";
+      outputAmount = (data?.parsedJson?.amountout || 0) / 10 ** decimal_b;
     } else if (flag === "aftermath") {
-      inputAmount = data.parsedJson.amount_in / 10 ** decimal_a;
-      inputSymbol = data.parsedJson.type_in.split("::").pop();
-      outputAmount = data.parsedJson.amount_out / 10 ** decimal_b;
+      const typeIn = data?.parsedJson?.type_in || "";
+      inputAmount = (data?.parsedJson?.amount_in || 0) / 10 ** decimal_a;
+      inputSymbol = typeIn.split("::").pop() || "UNKNOWN";
+      outputAmount = (data?.parsedJson?.amount_out || 0) / 10 ** decimal_b;
     } else if (flag === "router") {
-      inputAmount = data.parsedJson.amount_in / 10 ** decimal_a;
-      inputSymbol = data.parsedJson.from?.name?.split("::").pop() || "SUI";
-      outputAmount = data.parsedJson.amount_out / 10 ** decimal_b;
+      const fromName = data?.parsedJson?.from?.name || "";
+      inputAmount = (data?.parsedJson?.amount_in || 0) / 10 ** decimal_a;
+      inputSymbol = fromName.split("::").pop() || "SUI";
+      outputAmount = (data?.parsedJson?.amount_out || 0) / 10 ** decimal_b;
     } else return;
 
     if (inputSymbol === "SUI") inputPrice = inputAmount * suiPrice;
@@ -302,9 +274,8 @@ export const sendTransactionMessage = async (
       }
     }
 
-    message += `🛰 TxDigest: <a href="https://suiscan.xyz/mainnet/tx/${data.id.txDigest}">${instance.shortenAddress(
-      data.id.txDigest
-    )}</a>\n\n`;
+    message += `🛰 TxDigest: <a href="https://suiscan.xyz/mainnet/tx/${data.id.txDigest}">
+${instance.shortenAddress(data.id.txDigest)}</a>\n\n`;
     message += `📈 Chart: <a href="${CHART}">DexScreener</a>\n`;
     message += `🔗 Links: <a href="${WEBSITE}">Website</a> | <a href="${TELEGRAM}">Telegram</a> | <a href="${TWITTER}">Twitter</a>`;
 
@@ -327,15 +298,15 @@ export const sendTransactionMessage = async (
   }
 };
 
+/* ================================
+   Alert
+================================== */
+
 export const sendAlert = async (chatId: string, userName: string) => {
   if (!userName) return;
   try {
-    const message = `🙍‍♂️ User @${userName} logged in successfully. \n\n`;
-    await bot.sendMessage(
-      chatId,
-      message,
-      instance.sendMessageOption as TelegramBot.SendMessageOptions
-    );
+    const message = `🙍‍♂️ User @${userName} logged in successfully.\n\n`;
+    await bot.sendMessage(chatId, message, instance.sendMessageOption);
   } catch (error) {
     console.log("sendMessage err:", error);
   }
