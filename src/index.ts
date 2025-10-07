@@ -473,9 +473,7 @@ export const sendTransactionMessage = async (
         message += "🌐 DEX: Router 🔄\n\n";
       }
     }
-    message += `🛰 TxDigest: <a href="https://suiscan.xyz/mainnet/tx/${
-      data.id.txDigest
-    }">${instance.shortenAddress(data.id.txDigest)}</a>\n\n`;
+        message += `🛰 TxDigest: <a href="https://suiscan.xyz/mainnet/tx/${data.id.txDigest}">${instance.shortenAddress(data.id.txDigest)}</a>\n\n`;
 
     message += `📈 Chart:  <a href="${CHART}">DexScreener</a>\n`;
     message += `🔗 Links:  <a href="${WEBSITE}">Website</a>`;
