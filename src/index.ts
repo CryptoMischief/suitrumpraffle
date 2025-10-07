@@ -279,11 +279,14 @@ ${instance.shortenAddress(data.id.txDigest)}</a>\n\n`;
     message += `📈 Chart: <a href="${CHART}">DexScreener</a>\n`;
     message += `🔗 Links: <a href="${WEBSITE}">Website</a> | <a href="${TELEGRAM}">Telegram</a> | <a href="${TWITTER}">Twitter</a>`;
 
+    // ✅ Use typed ParseMode for sendVideo
+    const videoOptions: TelegramBot.SendVideoOptions = {
+      caption: message,
+      parse_mode: TelegramBot.ParseMode.HTML,
+    };
+
     await Promise.all([
-      bot.sendVideo(chatId, VIDEO_PATH, {
-        caption: message,
-        parse_mode: "HTML",
-      }),
+      bot.sendVideo(chatId, VIDEO_PATH, videoOptions),
       database.addTxEvent({
         sender:
           flag === "aftermath"
