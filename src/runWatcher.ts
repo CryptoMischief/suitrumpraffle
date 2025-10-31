@@ -21,9 +21,12 @@ const DEXES: DexEntry[] = [
 
   // Asset-level routed swap (emits alongside routed paths)
   { name: 'asset-router',         eventType: '0x3492c874c1e3b3e2984e8c41b589e642d4d0a5d6459e5a9cfc2d52fd7c89c267::events::AssetSwap' },
+  { name: 'cetus-lbp',            eventType: '0x5a5c1d10e4782dbbdec3eb8327ede04bd078b294b97cfdba447b11b846b383ac::lb_pair::SwapEvent' },
+  { name: 'pool-25929e7f',        eventType: '0x25929e7f29e0a30eb4e692952ba1b5b65a3a4d65ab5f2a32e1ba3edcb587f26d::pool::Swap' },
 
   // TURBOS (generic swap shows SUITRUMP leg in type params)
   { name: 'turbos-swap',          eventType: '0xb24b6789e088b876afabca733bed2299fbc9e2d6369be4d1acfa17d8145454d9::swap::Swap_Event<0x2::sui::SUI, 0xdeb831e796f16f8257681c0d5d4108fa94333060300b2459133a96631bf470b8::suitrump::SUITRUMP>' },
+  { name: 'suidex-pair-swap',     eventType: '0xbfac5e1c6bf6ef29b12f7723857695fd2f4da9a11a7d88162c15e9124c243a4a::pair::Swap<0x2::sui::SUI, 0xdeb831e796f16f8257681c0d5d4108fa94333060300b2459133a96631bf470b8::suitrump::SUITRUMP>' },
 
   // AFTERMATH v2
   { name: 'aftermath-swap-v2',    eventType: '0xc4049b2d1cc0f6e017fda8260e4377cecd236bd7f56a54fee120816e72e2e0dd::events::SwapEventV2' },
