@@ -20,6 +20,8 @@ import {
   getSuiPrice,
   getSuitrumpMarketCap,
   monitoringEvents,
+  resetMonitoringSession,
+  clearMonitoringSession,
 } from './web3';
 
 
@@ -53,6 +55,81 @@ bot.getMe().then((me) => {
   console.log("legend, me = ", me);
   botUsername = me.username;
 });
+
+const TELEGRAM_MIN_INTERVAL_MS = Number(
+  process.env.TELEGRAM_MIN_INTERVAL_MS ?? 1500
+);
+
+type QueueEntry = {
+  run: () => Promise<void>;
+  resolve: () => void;
+  reject: (err: unknown) => void;
+};
+
+const telegramSendQueue: QueueEntry[] = [];
+let telegramQueueProcessing = false;
+let telegramRetryAfter = 0;
+
+const delay = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const isTelegramRateLimit = (err: any): boolean =>
+  err?.code === "ETELEGRAM" &&
+  (err?.response?.statusCode === 429 ||
+    err?.response?.body?.error_code === 429);
+
+const getTelegramRetryMs = (err: any): number => {
+  const retryAfterHeader =
+    err?.response?.headers?.["retry-after"] ??
+    err?.response?.headers?.["Retry-After"];
+  const retryFromBody =
+    err?.response?.body?.parameters?.retry_after ??
+    err?.response?.parameters?.retry_after;
+  const seconds = Number(retryAfterHeader ?? retryFromBody ?? 30);
+  if (!Number.isFinite(seconds)) {
+    return 30_000;
+  }
+  return Math.max(seconds * 1000, 5000);
+};
+
+const enqueueTelegramSend = (task: () => Promise<void>) =>
+  new Promise<void>((resolve, reject) => {
+    telegramSendQueue.push({ run: task, resolve, reject });
+    void processTelegramQueue();
+  });
+
+async function processTelegramQueue() {
+  if (telegramQueueProcessing) return;
+  telegramQueueProcessing = true;
+
+  while (telegramSendQueue.length > 0) {
+    const now = Date.now();
+    if (now < telegramRetryAfter) {
+      await delay(telegramRetryAfter - now);
+    }
+
+    const entry = telegramSendQueue.shift()!;
+    try {
+      await entry.run();
+      entry.resolve();
+      await delay(TELEGRAM_MIN_INTERVAL_MS);
+    } catch (err) {
+      if (isTelegramRateLimit(err)) {
+        const waitMs = getTelegramRetryMs(err);
+        telegramRetryAfter = Date.now() + waitMs;
+        telegramSendQueue.unshift(entry);
+        console.warn(
+          `[telegram] rate limit hit, retrying in ${Math.ceil(waitMs / 1000)}s`
+        );
+        await delay(waitMs);
+      } else {
+        entry.reject(err);
+      }
+    }
+  }
+
+  telegramQueueProcessing = false;
+}
 
 const botCommands = [
   { command: "/start", description: "Start Monitoring (Group Owner Only)" },
@@ -107,6 +184,7 @@ bot.on("message", async (message) => {
 
     if (command === BOT_COMMAND_START) {
       if (await isAdminMsg(message)) {
+        resetMonitoringSession();
         await bot.sendMessage(
           session.chatId,
           "✅ Successfully started!",
@@ -117,6 +195,7 @@ bot.on("message", async (message) => {
     } else if (command == BOT_COMMAND_STOP) {
       if (await isAdminMsg(message)) {
         clearInterval(eventMonitorTimerId);
+        clearMonitoringSession();
         await bot.sendMessage(
           session.chatId,
           "✅ Successfully stopped!",
@@ -412,24 +491,76 @@ export const sendTransactionMessage = async (
       outputAmount = data.parsedJson.a2b
         ? data.parsedJson.amount_out / 10 ** decimal_b
         : data.parsedJson.amount_out / 10 ** decimal_a;
+    } else if (flag === "cetus_clmm") {
+      const details = data.parsedJson?.__clmm ?? {};
+      inputAmount = Number(details.suiAmountRaw ?? 0) / 10 ** decimal_a;
+      inputSymbol = "SUI";
+      outputAmount = Number(details.suitrumpAmountRaw ?? 0) / 10 ** decimal_b;
+      if (!outputAmount) {
+        return;
+      }
     } else if (flag === "settle" || flag === "flowx") {
       inputAmount = data.parsedJson.amount_in / 10 ** decimal_a;
       inputSymbol = data.parsedJson.coin_in.name.split("::").pop();
       outputAmount = data.parsedJson.amount_out / 10 ** decimal_b;
-    } else if (flag === "suirewardsme") { // Added: Handle SuiRewardsMe swap events
-      inputAmount = data.parsedJson.amountin / 10 ** decimal_a; // Added: Use amountin for input amount
-      inputSymbol = data.parsedJson.tokenin.name.split("::").pop(); // Added: Use tokenin.name for input token symbol
-      outputAmount = data.parsedJson.amountout / 10 ** decimal_b; // Added: Use amountout for output amount
-    } else if (flag === "aftermath") { // Added: Handle Aftermath swap events
-      inputAmount = data.parsedJson.amount_in / 10 ** decimal_a; // Added: Use amount_in for input amount
-      inputSymbol = data.parsedJson.type_in.split("::").pop(); // Added: Use type_in for input token symbol
-      outputAmount = data.parsedJson.amount_out / 10 ** decimal_b; // Added: Use amount_out for output amount
-    } else {
+    } else if (flag === "suirewardsme") {
+      inputAmount = data.parsedJson.amountin / 10 ** decimal_a;
+      inputSymbol = data.parsedJson.tokenin.name.split("::").pop();
+      outputAmount = data.parsedJson.amountout / 10 ** decimal_b;
+    } else if (flag === "aftermath") {
+      inputAmount = data.parsedJson.amount_in / 10 ** decimal_a;
+      inputSymbol = data.parsedJson.type_in.split("::").pop();
+      outputAmount = data.parsedJson.amount_out / 10 ** decimal_b;
+  } else if (flag === "cetus_router") {
+    inputAmount = Number(data.parsedJson.amount_in ?? 0) / 10 ** decimal_a;
+    inputSymbol = data.parsedJson.from?.name?.split("::").pop();
+    outputAmount = Number(data.parsedJson.amount_out ?? 0) / 10 ** decimal_b;
+    if (!outputAmount) {
       return;
     }
+  } else if (flag === "turbos") {
+    const computed = data.parsedJson?.__computed ?? {};
+    inputAmount = Number(computed.inputAmountRaw ?? 0) / 10 ** decimal_a;
+    inputSymbol = (computed.inputType ?? "").split("::").pop();
+    outputAmount = Number(computed.outputAmountRaw ?? 0) / 10 ** decimal_b;
+    if (!outputAmount) {
+      return;
+    }
+  } else if (flag === "suidex") {
+    const match =
+      typeof data.type === "string"
+        ? data.type.match(/<([^,>]+),\s*([^>]+)>/)
+        : null;
+    const coinASymbol = match ? match[1].split("::").pop() : null;
 
-    if (inputSymbol === "SUI") {
+    const amount0In = Number(data.parsedJson.amount0_in ?? 0);
+    const amount0Out = Number(data.parsedJson.amount0_out ?? 0);
+    const amount1Out = Number(data.parsedJson.amount1_out ?? 0);
+    const amount1In = Number(data.parsedJson.amount1_in ?? 0);
+
+    inputAmount =
+      amount0In > 0
+        ? amount0In / 10 ** decimal_a
+        : Math.abs(amount0Out) / 10 ** decimal_a;
+    inputSymbol = coinASymbol ?? "SUI";
+    outputAmount =
+      amount1Out > amount1In
+        ? (amount1Out - amount1In) / 10 ** decimal_b
+        : 0;
+
+    if (outputAmount === 0) {
+      return;
+    }
+  } else {
+    return;
+  }
+
+  if (inputSymbol === "SUI") {
       inputPrice = inputAmount * suiPrice;
+    }
+
+    if (!inputSymbol) {
+      inputSymbol = "UNKNOWN";
     }
 
     // Calculate emoji count (1 per 50,000 SUITRUMP, min 1)
@@ -448,15 +579,25 @@ export const sendTransactionMessage = async (
       message += `🎰 Market Cap: $${marketCap.toLocaleString()}\n`;
 
       // Added: Map flag to DEX name and emoji
-    const dexInfo = {
-      aftermath: { name: "Aftermath", emoji: "🦈" },
-      cetus: { name: "Cetus", emoji: "🐳" },
-      settle: { name: "BlueFin", emoji: "🐟" },
-      bluemove: { name: "BlueMove", emoji: "🌊" },
-      flowx: { name: "FlowX", emoji: "💧" },
-      suirewardsme: { name: "SuiRewardsMe", emoji: "🍃" },
-    };
-    message += `🌐 DEX: ${dexInfo[flag].name} ${dexInfo[flag].emoji}\n\n`; // Added: Display DEX name with emoji after TxDigest
+  const dexInfo: Record<
+    string,
+    { name: string; emoji: string }
+  > = {
+    aftermath: { name: "Aftermath", emoji: "🦈" },
+    cetus: { name: "Cetus", emoji: "🐳" },
+    settle: { name: "BlueFin", emoji: "🐟" },
+    bluemove: { name: "BlueMove", emoji: "🌊" },
+    flowx: { name: "FlowX", emoji: "💧" },
+    suirewardsme: { name: "SuiRewardsMe", emoji: "🍃" },
+    suidex: { name: "SuiDex", emoji: "🌀" },
+    cetus_router: { name: "Cetus Router", emoji: "🐙" },
+    cetus_clmm: { name: "Cetus CLMM", emoji: "🐳" },
+    turbos: { name: "Turbos", emoji: "🪐" },
+  };
+      const dexMeta = dexInfo[flag];
+      if (dexMeta) {
+        message += `🌐 DEX: ${dexMeta.name} ${dexMeta.emoji}\n\n`;
+      }
     }
     message += `🛰 TxDigest: <a href="https://suiscan.xyz/mainnet/tx/${
       data.id.txDigest
@@ -467,17 +608,24 @@ export const sendTransactionMessage = async (
     message += ` | <a href="${TELEGRAM}">Telegram</a>`;
     message += ` | <a href="${TWITTER}">Twitter</a>`;
 
-    await Promise.all([
-      bot.sendVideo(chatId, VIDEO_PATH, {
+    await enqueueTelegramSend(async () => {
+      await bot.sendVideo(chatId, VIDEO_PATH, {
         caption: message,
         parse_mode: "HTML",
-      }),
-      await database.addTxEvent({
-        sender: flag === "aftermath" ? data.parsedJson.swapper : data.parsedJson.wallet || data.sender, // Modified: Use swapper for Aftermath, wallet for SuiRewardsMe, else sender
-        amount: outputAmount,
-        endorser: null,
-      }),
-    ]);
+      });
+    });
+
+    await database.addTxEvent({
+      sender:
+        flag === "aftermath"
+          ? data.parsedJson.swapper
+          : data.parsedJson.wallet ||
+            data.parsedJson.sender ||
+            data.parsedJson.user ||
+            data.sender,
+      amount: outputAmount,
+      endorser: null,
+    });
   } catch (error) {
     console.log("sendMessage err: ", error);
   }
