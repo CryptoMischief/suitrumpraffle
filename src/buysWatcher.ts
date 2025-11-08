@@ -52,7 +52,7 @@ export class BuysWatcher {
   }
 
   private buildFilter(dex: DexEntry): EventFilter {
-    const eventType = dex.eventType;
+    const eventType = dex.eventType?.trim();
     if (!eventType) {
       throw new Error(`Missing eventType for dex ${dex.name}`);
     }
@@ -64,13 +64,14 @@ export class BuysWatcher {
       return { MoveModule: { package: pkg, module } };
     }
 
-    // Prefer an exact MoveEventType match when the string looks well-formed
-    if (/^(0x[0-9a-f]{64})::[A-Za-z0-9_]+::[A-Za-z0-9_]+(?:<.+>)?$/i.test(eventType)) {
+    const hasGenerics = eventType.includes('<');
+    const exactEventPattern = /^(0x[0-9a-f]{64})::[A-Za-z0-9_]+::[A-Za-z0-9_]+(?:<.+>)?$/i;
+
+    if (!hasGenerics && exactEventPattern.test(eventType)) {
       return { MoveEventType: eventType };
     }
 
-    // Fall back to module-level filtering if we can still recover package/module info
-    const m = eventType.match(/^(0x[0-9a-f]{64})::([A-Za-z0-9_]+)::/i);
+    const m = eventType.match(/^(0x[0-9a-f]{64})::([A-Za-z0-9_]+)/i);
     if (m) {
       const [, pkg, module] = m;
       return { MoveModule: { package: pkg, module } };
