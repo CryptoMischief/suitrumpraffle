@@ -1,8 +1,13 @@
 // src/buysWatcher.ts
 import { SuiClient, getFullnodeUrl, type SuiEventFilter } from '@mysten/sui/client';
 
-export type DexEntry = { name: string; eventType: string };
-export type Cursor = { txDigest: string; eventSeq: string } | null;
+export type DexEntry = {
+  name: string;
+  eventType?: string;
+  filterKind?: 'event' | 'module' | 'moveFunction';
+  functionFilter?: { package: string; module: string; function: string };
+};
+export type Cursor = { txDigest: string; eventSeq: string } | string | null;
 
 export interface CursorStore {
   get(dex: string): Promise<Cursor>;
@@ -46,39 +51,59 @@ export class BuysWatcher {
     for (const dex of this.opts.dexes) await this.processDex(dex);
   }
 
-  private buildFilter(eventType: string): EventFilter {
-    // If the type has generics (e.g., ...<0x2::sui::SUI, ...::SUITRUMP>), use MoveModule.
-    // Otherwise use MoveEventType as-is.
-    if (eventType.includes('<')) {
-      const m = eventType.match(/^(0x[0-9a-f]{64})::([A-Za-z0-9_]+)::/i);
-      if (!m) throw new Error(`Cannot parse package/module from generic event type: ${eventType}`);
+  private buildFilter(dex: DexEntry): EventFilter {
+    const eventType = dex.eventType?.trim();
+    if (!eventType) {
+      throw new Error(`Missing eventType for dex ${dex.name}`);
+    }
+
+    if (dex.filterKind === 'module') {
+      const m = eventType.match(/^(0x[0-9a-f]{64})::([A-Za-z0-9_]+)/i);
+      if (!m) throw new Error(`Invalid module identifier for ${dex.name}: ${eventType}`);
       const [, pkg, module] = m;
       return { MoveModule: { package: pkg, module } };
     }
-    // Also guard common typos: must be 0x...::module::Struct
-    if (!/^(0x[0-9a-f]{64})::[A-Za-z0-9_]+::[A-Za-z0-9_]+$/i.test(eventType)) {
-      // Fall back to MoveModule if we can parse pkg/module
-      const m = eventType.match(/^(0x[0-9a-f]{64})::([A-Za-z0-9_]+)::/i);
-      if (m) {
-        const [, pkg, module] = m;
-        return { MoveModule: { package: pkg, module } };
-      }
-      throw new Error(`Invalid eventType format: ${eventType}`);
+
+    const hasGenerics = eventType.includes('<');
+    const exactEventPattern = /^(0x[0-9a-f]{64})::[A-Za-z0-9_]+::[A-Za-z0-9_]+(?:<.+>)?$/i;
+
+    if (!hasGenerics && exactEventPattern.test(eventType)) {
+      return { MoveEventType: eventType };
     }
-    return { MoveEventType: eventType };
+
+    const m = eventType.match(/^(0x[0-9a-f]{64})::([A-Za-z0-9_]+)/i);
+    if (m) {
+      const [, pkg, module] = m;
+      return { MoveModule: { package: pkg, module } };
+    }
+
+    throw new Error(`Invalid eventType format: ${eventType}`);
   }
 
   private async processDex(dex: DexEntry) {
+    if (dex.filterKind === 'moveFunction' && dex.functionFilter) {
+      await this.processDexByFunction(dex);
+      return;
+    }
+    if (!dex.eventType) {
+      throw new Error(`Missing eventType for dex ${dex.name}`);
+    }
+    const pageLimit =
+      dex.filterKind === 'module' ? Math.max(1, MAX_PAGES * 5) : MAX_PAGES;
     let pages = 0;
-    let cursor = await this.opts.store.get(dex.name);
+    const storedCursor = await this.opts.store.get(dex.name);
+    let eventCursor =
+      storedCursor && typeof storedCursor !== 'string'
+        ? storedCursor
+        : null;
     let hasNext = true;
 
-    while (hasNext && pages < MAX_PAGES) {
-      const filter = this.buildFilter(dex.eventType);
+    while (hasNext && pages < pageLimit) {
+      const filter = this.buildFilter(dex);
 
       const res = await this.queryEventsWithRetry({
         query: filter,
-        cursor,
+        cursor: eventCursor ?? undefined,
         limit: 50,
         order: 'descending',
       });
@@ -86,6 +111,16 @@ export class BuysWatcher {
       for (const ev of res.data) {
         const key = `${ev.id.txDigest}:${ev.id.eventSeq}`;
         if (await this.opts.store.seen(key)) continue;
+        const typeStr = ev.type ?? '';
+        const isSwapLike = /::Swap[A-Za-z_]*</i.test(typeStr);
+        if (!isSwapLike) {
+          await this.opts.store.markSeen(key);
+          continue;
+        }
+        if (!typeStr.includes(this.SUITRUMP_TYPE)) {
+          await this.opts.store.markSeen(key);
+          continue;
+        }
 
         const tx = await this.fetchTransaction(ev.id.txDigest);
 
@@ -103,8 +138,72 @@ export class BuysWatcher {
         await this.opts.store.markSeen(key);
       }
 
-      cursor = res.nextCursor ?? null;
-      await this.opts.store.set(dex.name, cursor);
+      eventCursor = res.nextCursor ?? null;
+      await this.opts.store.set(dex.name, eventCursor);
+      hasNext = !!res.hasNextPage;
+      pages += 1;
+    }
+  }
+
+  private async processDexByFunction(dex: DexEntry) {
+    const pageLimit = Math.max(1, MAX_PAGES * 5);
+    let pages = 0;
+    const filter = dex.functionFilter!;
+    let cursor = await this.opts.store.get(dex.name);
+    let cursorValue =
+      typeof cursor === 'string'
+        ? cursor
+        : cursor && 'txDigest' in cursor
+        ? cursor.txDigest
+        : null;
+    let hasNext = true;
+
+    while (hasNext && pages < pageLimit) {
+      const res = await this.client.queryTransactionBlocks({
+        filter: { MoveFunction: filter },
+        cursor: cursorValue ?? undefined,
+        limit: 50,
+        order: 'descending',
+        options: { showInput: true },
+      });
+
+      for (const tx of res.data) {
+        const digest = tx.digest;
+        if (!digest) continue;
+        const key = `${digest}:0`;
+        if (await this.opts.store.seen(key)) continue;
+
+        const typeArgs =
+          tx.transaction?.data?.transaction?.kind === 'ProgrammableTransaction'
+            ? tx.transaction.data.transaction.transactions
+                .flatMap((item: any) =>
+                  item.MoveCall?.type_arguments ?? []
+                )
+            : [];
+
+        if (!typeArgs.includes(this.SUITRUMP_TYPE)) {
+          await this.opts.store.markSeen(key);
+          continue;
+        }
+
+        const fullTx = await this.fetchTransaction(digest);
+
+        if (this.isSuitrumpBuyByNetDelta(fullTx)) {
+          const amount = this.extractSuitrumpChange(fullTx)?.abs;
+          await this.opts.sink.notifyBuy({
+            dex: dex.name,
+            txDigest: digest,
+            amount,
+            symbol: 'SUITRUMP',
+            link: `https://suiscan.xyz/mainnet/tx/${digest}`,
+          });
+        }
+
+        await this.opts.store.markSeen(key);
+      }
+
+      cursorValue = res.nextCursor ?? null;
+      await this.opts.store.set(dex.name, cursorValue ?? null);
       hasNext = !!res.hasNextPage;
       pages += 1;
     }
